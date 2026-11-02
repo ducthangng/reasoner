@@ -177,11 +177,17 @@ Explain like I'm 5:
   comparison from a child's world (toys, cooking, playground games). No jargon at all. It should still be
   accurate, just simplified.
 
-Concepts:
-Identify the concepts a newcomer must understand to follow this paper: the background ideas, methods,
-mathematical tools, metrics and domain terms it relies on. You decide how many. A short, focused paper may need only
-a handful, while a dense paper that spans several fields may need many more. Include every concept that genuinely
-helps a learner understand the paper, and don't pad the list with trivia.
+Concepts (broad groups, not a long list):
+Identify the big concepts a newcomer must understand to follow this paper. Each concept is a broad family or idea
+that groups related things together. For example "Saliency methods" is one concept, and Grad-CAM, Integrated
+Gradients and SmoothGrad are methods listed inside it, not separate concepts. Likewise "Transformer architecture"
+or "Statistical hypothesis testing". Keep the list short and high-level: usually 4-10 concepts, a few more only for
+a paper that spans several fields. Never make a concept out of a single method.
+
+Inside each concept, briefly list its methods: first the ones this paper proposes, uses or compares against (with
+exactly the same names as in the top-level "methods" list), then a few closely related well-known methods the paper
+doesn't use, so the learner sees the landscape. One sentence each. Every method in the top-level "methods" list
+should appear inside some concept.
 
 Rank the concepts by how much a learner needs them to understand this paper, most essential first. Give each one
 a relevance tier:
@@ -192,11 +198,11 @@ a relevance tier:
 The list must be ordered so that every essential concept comes before every important one, and so on, with the
 most relevant concept first within each tier.
 
-For each concept, teach it from scratch, explain its specific role in this paper and why it has its rank, and list
+For each concept, teach it briefly from scratch, explain its role in this paper and why it has its rank, and list
 the PDF pages (1-indexed, as the PDF viewer counts them) where it appears. Prerequisites should reference other
 concepts in your list by their exact term when possible.
 
-Also write the summary, reading plan and self-check questions described in the output schema.${extra}`,
+Keep the writing tight. Depth belongs in the methods, research questions, gaps and evaluation, not in long prose.${extra}`,
           },
         ],
       },

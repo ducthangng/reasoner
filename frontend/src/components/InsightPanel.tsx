@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { AiSettings, Method, PaperAnalysis, PaperDetail, PaperSummary } from "../types";
 import { AskTab } from "./AskTab";
 import { ConceptsTab } from "./ConceptsTab";
+import { Eli5 } from "./Eli5";
 import { Markdown } from "./Markdown";
 import { aiLabel } from "./ModelPicker";
 
-type Tab = "overview" | "research" | "methods" | "concepts" | "practice" | "ask";
+type Tab = "overview" | "research" | "concepts" | "methods" | "ask";
 
 interface Props {
   paper: PaperSummary;
@@ -21,6 +22,9 @@ interface Props {
 export function InsightPanel({ paper, onJumpToPage, onRegenerate, onBack, ai }: Props) {
   const [detail, setDetail] = useState<PaperDetail | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
+  // Cross-links: a method listed in a concept opens in the Methods tab, and vice versa.
+  const [focusMethod, setFocusMethod] = useState<{ name: string; nonce: number } | null>(null);
+  const [focusConcept, setFocusConcept] = useState<number | null>(null);
 
   useEffect(() => {
     if (paper.status !== "ready") return;
@@ -68,11 +72,18 @@ export function InsightPanel({ paper, onJumpToPage, onRegenerate, onBack, ai }: 
   const tabs: [Tab, string][] = [
     ["overview", "Overview"],
     ["research", "Research"],
-    ["methods", a.methods ? `Methods (${a.methods.length})` : "Methods"],
     ["concepts", `Concepts (${a.concepts.length})`],
-    ["practice", "Practice"],
+    ["methods", a.methods ? `Methods (${a.methods.length})` : "Methods"],
     ["ask", "Ask"],
   ];
+  const openMethod = (name: string) => {
+    setFocusMethod({ name, nonce: Date.now() });
+    setTab("methods");
+  };
+  const openConcept = (index: number) => {
+    setFocusConcept(index);
+    setTab("concepts");
+  };
 
   return (
     <div className="insight">
@@ -115,9 +126,24 @@ export function InsightPanel({ paper, onJumpToPage, onRegenerate, onBack, ai }: 
       <div className="insight-body">
         {tab === "overview" && <OverviewTab a={a} />}
         {tab === "research" && <ResearchTab a={a} onRegenerate={onRegenerate} />}
-        {tab === "methods" && <MethodsTab a={a} onJumpToPage={onJumpToPage} onRegenerate={onRegenerate} />}
-        {tab === "concepts" && <ConceptsTab concepts={a.concepts} onJumpToPage={onJumpToPage} />}
-        {tab === "practice" && <PracticeTab questions={a.check_questions} />}
+        {tab === "concepts" && (
+          <ConceptsTab
+            concepts={a.concepts}
+            onJumpToPage={onJumpToPage}
+            detailedMethods={new Set((a.methods ?? []).map((m) => m.name.toLowerCase()))}
+            onOpenMethod={openMethod}
+            focus={focusConcept}
+          />
+        )}
+        {tab === "methods" && (
+          <MethodsTab
+            a={a}
+            onJumpToPage={onJumpToPage}
+            onRegenerate={onRegenerate}
+            focus={focusMethod}
+            onOpenConcept={openConcept}
+          />
+        )}
         {tab === "ask" && <AskTab paperId={paper.id} ai={ai} />}
       </div>
     </div>
@@ -130,17 +156,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h4>{title}</h4>
       {children}
     </section>
-  );
-}
-
-/** "Explain like I'm 5" callout. */
-function Eli5({ children }: { children?: string }) {
-  if (!children) return null;
-  return (
-    <div className="eli5">
-      <span className="eli5-label">Like I'm 5</span>
-      {children}
-    </div>
   );
 }
 
@@ -279,12 +294,34 @@ function MethodsTab({
   a,
   onJumpToPage,
   onRegenerate,
+  focus,
+  onOpenConcept,
 }: {
   a: PaperAnalysis;
   onJumpToPage: (page: number) => void;
   onRegenerate: () => void;
+  focus: { name: string; nonce: number } | null;
+  onOpenConcept: (index: number) => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  // Which concept group each method belongs to, by name.
+  const conceptOf = useMemo(() => {
+    const map = new Map<string, number>();
+    a.concepts.forEach((c, i) =>
+      c.methods?.forEach((m) => map.set(m.name.toLowerCase(), map.get(m.name.toLowerCase()) ?? i)),
+    );
+    return map;
+  }, [a]);
+
+  useEffect(() => {
+    if (!focus || !a.methods) return;
+    const m = a.methods.find((x) => x.name.toLowerCase() === focus.name.toLowerCase());
+    if (!m) return;
+    const key = `${m.kind}:${m.name}`;
+    setOpen(key);
+    requestAnimationFrame(() => document.getElementById(`method-${key}`)?.scrollIntoView({ block: "start" }));
+  }, [focus, a]);
+
   if (!a.methods) return <MissingSection onRegenerate={onRegenerate} />;
   const methods = [...a.methods].sort((x, y) => KIND_ORDER.indexOf(x.kind) - KIND_ORDER.indexOf(y.kind));
 
@@ -300,7 +337,7 @@ function MethodsTab({
                 <span className="tier-name">{KIND_LABEL[m.kind]}</span>
               </div>
             )}
-            <div className={`concept ${isOpen ? "open" : ""}`}>
+            <div id={`method-${key}`} className={`concept ${isOpen ? "open" : ""}`}>
               <button className="concept-head" onClick={() => setOpen(isOpen ? null : key)}>
                 <span className="concept-term">{m.name}</span>
                 <span className={`chip kind-${m.kind}`}>{KIND_LABEL[m.kind]}</span>
@@ -308,6 +345,17 @@ function MethodsTab({
               <div className="concept-def flush">{m.what_it_is}</div>
               {isOpen && (
                 <div className="concept-body flush">
+                  {conceptOf.has(m.name.toLowerCase()) && (
+                    <div className="meta-row">
+                      <span className="muted small">Part of</span>
+                      <button
+                        className="chip link-chip"
+                        onClick={() => onOpenConcept(conceptOf.get(m.name.toLowerCase())!)}
+                      >
+                        {a.concepts[conceptOf.get(m.name.toLowerCase())!].term} →
+                      </button>
+                    </div>
+                  )}
                   {m.pages.length > 0 && (
                     <div className="meta-row">
                       <span className="pages">
@@ -331,31 +379,6 @@ function MethodsTab({
         );
       })}
       {methods.length === 0 && <p className="muted small">No specific methods identified.</p>}
-    </div>
-  );
-}
-
-function PracticeTab({ questions }: { questions: { question: string; answer: string }[] }) {
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
-  return (
-    <div className="practice">
-      <p className="muted small">Test yourself. Try answering before revealing.</p>
-      {questions.map((q, i) => (
-        <div key={i} className="card">
-          <div className="question">
-            <span className="q-num">{i + 1}</span> {q.question}
-          </div>
-          {revealed.has(i) ? (
-            <div className="answer">
-              <Markdown>{q.answer}</Markdown>
-            </div>
-          ) : (
-            <button className="link" onClick={() => setRevealed((s) => new Set(s).add(i))}>
-              Reveal answer
-            </button>
-          )}
-        </div>
-      ))}
     </div>
   );
 }

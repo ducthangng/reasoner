@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
+import { ColumnResizer, usePanelWidth } from "./components/ColumnResizer";
 import { CompareView } from "./components/CompareView";
 import { InsightPanel } from "./components/InsightPanel";
 import { LibraryGrid } from "./components/LibraryGrid";
@@ -50,6 +51,9 @@ export default function App() {
   const passwordPrompt = usePasswordPrompt();
   const askPassword = passwordPrompt.ask;
   const regenerateDialog = useRegenerateDialog(ai);
+  const panel = usePanelWidth();
+  const panelStyle = { "--panel": `${panel.width}px` } as React.CSSProperties;
+  const resizer = <ColumnResizer width={panel.width} onResize={panel.setWidth} onReset={panel.reset} />;
 
   /** Navigates and records a browser history entry (or replaces the current one). */
   const go = useCallback((next: Route, replace = false) => {
@@ -261,8 +265,9 @@ export default function App() {
       )}
 
       {view === "read" && (
-        <main className={`read-layout pane-${pane}`}>
+        <main className={`read-layout pane-${pane}`} style={panelStyle}>
           <aside className="insight-pane">
+            {resizer}
             {selectedPaper ? (
               <InsightPanel
                 key={selectedPaper.id}
@@ -301,6 +306,8 @@ export default function App() {
           ai={ai}
           layoutClass={`pane-${pane} ${libraryOpen ? "library-open" : ""}`}
           onCloseLibrary={() => setLibraryOpen(false)}
+          layoutStyle={panelStyle}
+          panelResizer={resizer}
         />
       )}
 

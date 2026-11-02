@@ -18,6 +18,9 @@ interface Props {
   /** Responsive-layout classes from App (pane switch, library drawer). */
   layoutClass: string;
   onCloseLibrary: () => void;
+  /** Sets the details panel width (--panel) and the drag handle that changes it. */
+  layoutStyle: React.CSSProperties;
+  panelResizer: React.ReactNode;
 }
 
 export function CompareView({
@@ -30,6 +33,8 @@ export function CompareView({
   ai,
   layoutClass,
   onCloseLibrary,
+  layoutStyle,
+  panelResizer,
 }: Props) {
   const ready = papers.filter((p) => p.status === "ready");
   const [picked, setPicked] = useState<string[]>([]);
@@ -78,7 +83,7 @@ export function CompareView({
   const result = detail?.result;
 
   return (
-    <main className={`compare-layout ${layoutClass}`}>
+    <main className={`compare-layout ${layoutClass}`} style={layoutStyle}>
       <div className="drawer-backdrop" onClick={onCloseLibrary} />
       <nav className="library">
         <div className="pane-heading">New map</div>
@@ -134,6 +139,7 @@ export function CompareView({
       </nav>
 
       <aside className="insight-pane">
+        {panelResizer}
         {result && (
           <div className="insight">
             <div className="insight-body">

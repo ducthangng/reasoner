@@ -180,10 +180,10 @@ h5 {
 }
 /* The info column sits on the left, the document or map on the right. */
 .read-layout {
-  grid-template-columns: var(--panel) minmax(0, 1fr);
+  grid-template-columns: min(var(--panel), calc(100vw - 360px)) minmax(0, 1fr);
 }
 .compare-layout {
-  grid-template-columns: var(--rail) var(--panel) minmax(0, 1fr);
+  grid-template-columns: var(--rail) min(var(--panel), calc(100vw - var(--rail) - 360px)) minmax(0, 1fr);
 }
 
 /* ---------- Library rail ---------- */
@@ -371,6 +371,7 @@ h5 {
 
 /* ---------- Insight panel ---------- */
 .insight-pane {
+  position: relative;
   background: var(--surface);
   border-right: 1px solid var(--border);
   min-height: 0;
@@ -1056,10 +1057,10 @@ h5 {
 /* Library becomes a slide-out drawer. */
 @media (max-width: 1100px) {
   .read-layout {
-    grid-template-columns: minmax(300px, var(--panel)) minmax(0, 1fr);
+    grid-template-columns: minmax(280px, min(var(--panel), calc(100vw - 360px))) minmax(0, 1fr);
   }
   .compare-layout {
-    grid-template-columns: minmax(280px, var(--panel)) minmax(0, 1fr);
+    grid-template-columns: minmax(280px, min(var(--panel), calc(100vw - 360px))) minmax(0, 1fr);
   }
   .library {
     position: fixed;
@@ -1368,4 +1369,113 @@ h5 {
 }
 .right {
   text-align: right;
+}
+
+/* ---------- Column resizer ---------- */
+.col-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -5px;
+  width: 10px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+.col-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.col-resizer:hover::after,
+.col-resizer:focus-visible::after,
+.col-resizing .col-resizer::after {
+  background: var(--accent);
+}
+.col-resizer:focus-visible {
+  outline: none;
+}
+/* While dragging: keep the resize cursor everywhere and don't select text or let the PDF catch the pointer. */
+body.col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.col-resizing .pdf-pane,
+body.col-resizing .map-pane {
+  pointer-events: none;
+}
+@media (max-width: 760px) {
+  .col-resizer {
+    display: none;
+  }
+}
+
+/* ---------- Methods grouped inside a concept ---------- */
+.method-count {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.method-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.method-item {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+.method-item:first-child {
+  border-top: none;
+}
+.method-item.rel-related {
+  background: var(--surface-2);
+}
+.method-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.method-name {
+  font-weight: 600;
+  font-size: 13px;
+  text-align: left;
+}
+.method-summary {
+  font-size: 12.5px;
+  color: #57534e;
+  margin-top: 2px;
+}
+.rel-chip {
+  font-size: 10.5px;
+  padding: 0 7px;
+  flex-shrink: 0;
+}
+.rel-chip.rel-proposed {
+  color: #7c3aed;
+  border-color: #ddd6fe;
+}
+.rel-chip.rel-used {
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+.rel-chip.rel-compared {
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+.rel-chip.rel-related {
+  color: var(--muted);
+  border-color: var(--border);
 }

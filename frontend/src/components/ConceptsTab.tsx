@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
-import type { Concept, ConceptCategory, Relevance } from "../types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Concept, ConceptCategory, ConceptMethod, Relevance } from "../types";
+import { Eli5 } from "./Eli5";
 import { Markdown } from "./Markdown";
 
 export const CATEGORY_LABEL: Record<ConceptCategory, string> = {
@@ -20,20 +21,30 @@ export const RELEVANCE_INFO: Record<Relevance, { label: string; hint: string }> 
 };
 const TIERS = Object.keys(RELEVANCE_INFO) as Relevance[];
 
+const RELATION_LABEL: Record<ConceptMethod["relation"], string> = {
+  proposed: "Proposed here",
+  used: "Used",
+  compared: "Compared",
+  related: "Related",
+};
+
 interface Props {
   concepts: Concept[];
   onJumpToPage: (page: number) => void;
+  /** Lower-cased names of methods that have a full entry in the Methods tab. */
+  detailedMethods: Set<string>;
+  onOpenMethod: (name: string) => void;
+  /** Concept to open and scroll to (e.g. coming from the Methods tab). */
+  focus?: number | null;
 }
 
-export function ConceptsTab({ concepts, onJumpToPage }: Props) {
-  const [open, setOpen] = useState<number | null>(0);
+export function ConceptsTab({ concepts, onJumpToPage, detailedMethods, onOpenMethod, focus }: Props) {
+  const [open, setOpen] = useState<number | null>(focus ?? 0);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<ConceptCategory | "all">("all");
   const [tier, setTier] = useState<Relevance | "all">("all");
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const indexByTerm = useMemo(() => new Map(concepts.map((c, i) => [c.term.toLowerCase(), i])), [concepts]);
-  const categories = useMemo(() => [...new Set(concepts.map((c) => c.category))], [concepts]);
   const tierCounts = useMemo(() => {
     const counts = new Map<Relevance, number>();
     for (const c of concepts) counts.set(c.relevance, (counts.get(c.relevance) ?? 0) + 1);
@@ -45,14 +56,19 @@ export function ConceptsTab({ concepts, onJumpToPage }: Props) {
     .map((c, i) => ({ c, i }))
     .filter(
       ({ c }) =>
-        (category === "all" || c.category === category) &&
         (tier === "all" || c.relevance === tier) &&
         (!q || c.term.toLowerCase().includes(q) || c.short_definition.toLowerCase().includes(q)),
     );
 
+  // Open and scroll to a concept requested from outside (e.g. "Part of" in the Methods tab).
+  useEffect(() => {
+    if (focus === null || focus === undefined) return;
+    setOpen(focus);
+    requestAnimationFrame(() => itemRefs.current[focus]?.scrollIntoView({ block: "start" }));
+  }, [focus]);
+
   const goTo = (i: number) => {
     setQuery("");
-    setCategory("all");
     setTier("all");
     setOpen(i);
     requestAnimationFrame(() => itemRefs.current[i]?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
@@ -81,20 +97,6 @@ export function ConceptsTab({ concepts, onJumpToPage }: Props) {
           </button>
         ))}
       </div>
-      <div className="chip-row">
-        <button className={`chip ${category === "all" ? "on" : ""}`} onClick={() => setCategory("all")}>
-          All
-        </button>
-        {categories.map((cat) => (
-          <button
-            key={cat}
-            className={`chip cat-${cat} ${category === cat ? "on" : ""}`}
-            onClick={() => setCategory(cat)}
-          >
-            {CATEGORY_LABEL[cat]}
-          </button>
-        ))}
-      </div>
       {visible.map(({ c, i }, n) => (
         <div key={i}>
           {(n === 0 || visible[n - 1].c.relevance !== c.relevance) && (
@@ -112,26 +114,41 @@ export function ConceptsTab({ concepts, onJumpToPage }: Props) {
             <button className="concept-head" onClick={() => setOpen(open === i ? null : i)}>
               <span className="rank">{i + 1}</span>
               <span className="concept-term">{c.term}</span>
+              {!!c.methods?.length && (
+                <span className="method-count">
+                  {c.methods.length} {c.methods.length === 1 ? "method" : "methods"}
+                </span>
+              )}
               <span className={`dot cat-${c.category}`} title={CATEGORY_LABEL[c.category]} />
             </button>
             <div className="concept-def">{c.short_definition}</div>
             {open === i && (
               <div className="concept-body">
-                <div className="meta-row">
-                  <span className={`chip cat-${c.category}`}>{CATEGORY_LABEL[c.category]}</span>
-                  <span className="chip subtle">{c.difficulty}</span>
-                  {c.pages.length > 0 && (
-                    <span className="pages">
-                      {c.pages.slice(0, 8).map((p) => (
-                        <button key={p} className="page-btn" onClick={() => onJumpToPage(p)}>
-                          p.{p}
-                        </button>
-                      ))}
-                    </span>
-                  )}
-                </div>
+                {!!c.methods?.length && (
+                  <ul className="method-list">
+                    {c.methods.map((m) => {
+                      const detailed = detailedMethods.has(m.name.toLowerCase());
+                      return (
+                        <li key={m.name} className={`method-item rel-${m.relation}`}>
+                          <div className="method-item-head">
+                            {detailed ? (
+                              <button className="method-name link" onClick={() => onOpenMethod(m.name)}>
+                                {m.name} →
+                              </button>
+                            ) : (
+                              <span className="method-name">{m.name}</span>
+                            )}
+                            <span className={`chip rel-chip rel-${m.relation}`}>{RELATION_LABEL[m.relation]}</span>
+                          </div>
+                          <div className="method-summary">{m.summary}</div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <Eli5>{c.eli5}</Eli5>
                 <Markdown>{c.explanation}</Markdown>
-                {c.analogy && (
+                {c.analogy && !c.eli5 && (
                   <div className="callout">
                     <strong>Think of it like:</strong> {c.analogy}
                   </div>
@@ -143,6 +160,16 @@ export function ConceptsTab({ concepts, onJumpToPage }: Props) {
                     <h5>Why it ranks #{i + 1}</h5>
                     <p className="small">{c.relevance_reason}</p>
                   </>
+                )}
+                {c.pages.length > 0 && (
+                  <div className="meta-row">
+                    <span className="muted small">Pages</span>
+                    {c.pages.slice(0, 10).map((p) => (
+                      <button key={p} className="page-btn" onClick={() => onJumpToPage(p)}>
+                        p.{p}
+                      </button>
+                    ))}
+                  </div>
                 )}
                 {c.prerequisites.length > 0 && (
                   <>

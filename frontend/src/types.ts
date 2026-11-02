@@ -47,6 +47,12 @@ export interface Evaluation {
   eli5: string;
 }
 
+export interface ConceptMethod {
+  name: string;
+  relation: "proposed" | "used" | "compared" | "related";
+  summary: string;
+}
+
 export type ConceptCategory = "foundation" | "method" | "math" | "domain" | "tool" | "metric" | "result";
 
 export type Relevance = "essential" | "important" | "helpful" | "peripheral";
@@ -60,7 +66,10 @@ export interface Concept {
   short_definition: string;
   explanation: string;
   role_in_paper: string;
-  analogy: string;
+  /** Older analyses have an analogy instead of eli5, and no methods. */
+  analogy?: string;
+  eli5?: string;
+  methods?: ConceptMethod[];
   prerequisites: string[];
   pages: number[];
 }
@@ -86,7 +95,8 @@ export interface PaperAnalysis {
   limitations: string[];
   reading_plan: string[];
   concepts: Concept[];
-  check_questions: { question: string; answer: string }[];
+  /** Only in older analyses. */
+  check_questions?: { question: string; answer: string }[];
 }
 
 export interface PaperDetail extends PaperSummary {

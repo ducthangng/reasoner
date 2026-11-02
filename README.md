@@ -20,7 +20,9 @@ backend/    Node + Express + TypeScript → Railway (with Railway Postgres)
   - the research gaps it fills and the gaps still open
   - every specific method, model, dataset and tool, with what it is, what it's used for and how it works
   - the evaluation: setup, data, metrics, baselines, results, and how convincing it is
-  - the ranked concepts, self-check questions and chat
+  - a short list of broad, ranked concepts (e.g. "Saliency methods"); opening one briefly lists its methods
+    (the paper's own, plus closely related ones), linked to the Methods tab
+  - chat with the paper
   
   Each hypothesis, gap, method and the evaluation also gets a "Like I'm 5" explanation.
 - **Regenerate:** "↻ Regenerate" analyzes the paper again with the current model and mode, plus optional extra

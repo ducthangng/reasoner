@@ -2,8 +2,13 @@ import { z } from "zod";
 
 export const RELEVANCE_TIERS = ["essential", "important", "helpful", "peripheral"] as const;
 
+const ELI5_HINT =
+  "Explain it like I'm 5: 2-4 short sentences, simple everyday words, a concrete comparison from a child's world, no jargon";
+
 export const ConceptSchema = z.object({
-  term: z.string().describe("The concept, term, method or idea as it is usually named"),
+  term: z
+    .string()
+    .describe("A broad concept that groups related ideas and methods, e.g. 'Saliency methods', not one specific method"),
   relevance: z
     .enum(RELEVANCE_TIERS)
     .describe("How much a learner needs this concept to understand the paper"),
@@ -13,19 +18,27 @@ export const ConceptSchema = z.object({
     .describe("What kind of concept this is"),
   difficulty: z.enum(["beginner", "intermediate", "advanced"]),
   short_definition: z.string().describe("One plain-language sentence a newcomer understands"),
-  explanation: z
-    .string()
-    .describe("2-4 short paragraphs teaching the concept from scratch, building intuition first"),
-  role_in_paper: z.string().describe("How and why this paper uses the concept"),
-  analogy: z.string().describe("A concrete everyday analogy or example; empty string if none fits"),
+  explanation: z.string().describe("1-2 short paragraphs teaching the concept from scratch, intuition first"),
+  role_in_paper: z.string().describe("How and why this paper uses the concept, in 1-3 sentences"),
+  eli5: z.string().describe(ELI5_HINT),
+  methods: z
+    .array(
+      z.object({
+        name: z
+          .string()
+          .describe("Specific method name. For methods the paper uses, the exact name used in the top-level 'methods' list"),
+        relation: z
+          .enum(["proposed", "used", "compared", "related"])
+          .describe("proposed: introduced by this paper; used: the paper uses it; compared: a baseline; related: a well-known method in this group that the paper doesn't use"),
+        summary: z.string().describe("One sentence: what it is and what it's for"),
+      }),
+    )
+    .describe("The specific methods in this concept group, papers' own ones first, then closely related ones"),
   prerequisites: z
     .array(z.string())
     .describe("Terms (ideally other concepts in this list) a learner should know first"),
   pages: z.array(z.number()).describe("1-indexed PDF pages where the concept appears or is defined"),
 });
-
-const ELI5_HINT =
-  "Explain it like I'm 5: 2-4 short sentences, simple everyday words, a concrete comparison from a child's world, no jargon";
 
 export const MethodSchema = z.object({
   name: z.string().describe("The specific name of the method, model, algorithm, technique, dataset or tool"),
@@ -95,10 +108,7 @@ export const PaperAnalysisSchema = z.object({
     .describe("Ordered steps for reading this paper as a beginner, naming sections and pages"),
   concepts: z
     .array(ConceptSchema)
-    .describe("Every concept a learner needs, ranked from most to least relevant to understanding the paper"),
-  check_questions: z
-    .array(z.object({ question: z.string(), answer: z.string() }))
-    .describe("5-8 self-check questions with answers to test understanding"),
+    .describe("The broad concepts a learner needs, each grouping its methods, ranked from most to least relevant"),
 });
 export type PaperAnalysis = z.infer<typeof PaperAnalysisSchema>;
 
