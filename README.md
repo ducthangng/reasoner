@@ -12,6 +12,21 @@ backend/    Node + Express + TypeScript → Railway (with Railway Postgres)
 
 ## How it works
 
+- **Library:** the home screen shows every paper as a card with a preview of its first page. Click a card to open
+  the reader: the analysis on the left, the PDF on the right.
+- **What the analysis contains:**
+  - an overview, with a summary for complete beginners
+  - the hypotheses and research questions, with what the paper found
+  - the research gaps it fills and the gaps still open
+  - every specific method, model, dataset and tool, with what it is, what it's used for and how it works
+  - the evaluation: setup, data, metrics, baselines, results, and how convincing it is
+  - the ranked concepts, self-check questions and chat
+  
+  Each hypothesis, gap, method and the evaluation also gets a "Like I'm 5" explanation.
+- **Regenerate:** "↻ Regenerate" analyzes the paper again with the current model and mode, plus optional extra
+  instructions such as "focus on the statistics in section 4". It replaces the previous analysis and needs the
+  analysis password.
+
 - **Model and mode:** the **Model** menu offers a fixed list of current OpenAI models suited to research, set in
   `RESEARCH_MODELS` in `backend/src/llm.ts`, minus any your key can't use. The backend rejects models outside that
   list. The **Mode** menu sets the reasoning effort: Model default, None, Minimal, Low,

@@ -129,7 +129,14 @@ function pdfInput(fileId: string) {
   return { type: "input_file" as const, file_id: fileId };
 }
 
-export async function analyzePaper(ai: AiSettings, fileId: string): Promise<PaperAnalysis> {
+export async function analyzePaper(
+  ai: AiSettings,
+  fileId: string,
+  extraInstructions?: string | null,
+): Promise<PaperAnalysis> {
+  const extra = extraInstructions?.trim()
+    ? `\n\nAdditional instructions from the learner. Follow them, as long as the output still matches the schema:\n<learner_instructions>\n${extraInstructions.trim()}\n</learner_instructions>`
+    : "";
   const stream = client.responses.stream({
     ...modelParams(ai),
     instructions: MENTOR,
@@ -141,8 +148,36 @@ export async function analyzePaper(ai: AiSettings, fileId: string): Promise<Pape
           pdfInput(fileId),
           {
             type: "input_text",
-            text: `Analyze this paper for a motivated learner who is new to the field.
+            text: `Analyze this paper in depth for a motivated learner who is new to the field. Your analysis has to work
+on two levels at once: the big picture (what the paper is about and why it matters) and the specific technical
+substance (exactly which methods it uses and how they work). Don't stop at general topics. Name things.
 
+Research framing:
+- State every hypothesis and research question the paper tests, precisely as the paper frames it, and what it
+  found about each. If they are only implied, infer them from the introduction and experiments.
+- Identify the research gaps: what was missing or not working in prior work (cite which prior work when the paper
+  does) that this paper addresses, then the gaps that remain open afterwards.
+
+Methods (the most important part to get deep):
+- List every specific named method, model, architecture, algorithm, technique, loss, dataset and tool the paper
+  proposes or relies on, for example "BERT-base", "LoRA", "Adam", "ImageNet-1k" or "two-sample t-test", not
+  "a neural network" or "a statistical test".
+- For each: what it is technically, what this paper uses it for and why, and how it works step by step (inputs,
+  key steps or equations described in words, outputs, important hyperparameters or settings). Mark whether the
+  paper proposes it, builds on it, uses it as a baseline, or it's a dataset or tool.
+- In "methodology", explain how the pieces fit together into the full pipeline.
+
+Evaluation:
+- Describe exactly how the claims are tested: setup, datasets or participants, every metric (what it measures,
+  and whether higher or lower is better), baselines, and the key results with their actual numbers. Then judge how
+  convincing the evaluation is.
+
+Explain like I'm 5:
+- Every "eli5" field must be understandable by a five-year-old: short sentences, everyday words, and a concrete
+  comparison from a child's world (toys, cooking, playground games). No jargon at all. It should still be
+  accurate, just simplified.
+
+Concepts:
 Identify the concepts a newcomer must understand to follow this paper: the background ideas, methods,
 mathematical tools, metrics and domain terms it relies on. You decide how many. A short, focused paper may need only
 a handful, while a dense paper that spans several fields may need many more. Include every concept that genuinely
@@ -161,7 +196,7 @@ For each concept, teach it from scratch, explain its specific role in this paper
 the PDF pages (1-indexed, as the PDF viewer counts them) where it appears. Prerequisites should reference other
 concepts in your list by their exact term when possible.
 
-Also write the summary, reading plan and self-check questions described in the output schema.`,
+Also write the summary, reading plan and self-check questions described in the output schema.${extra}`,
           },
         ],
       },

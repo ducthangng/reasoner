@@ -55,8 +55,8 @@ export const api = {
       headers: { "X-Analyze-Password": password },
     });
   },
-  reanalyze: (id: string, ai: AiSettings, password: string) => {
-    const init = json(ai);
+  reanalyze: (id: string, ai: AiSettings, password: string, instructions: string) => {
+    const init = json({ ...ai, instructions });
     return request<PaperSummary>(`/api/papers/${id}/reanalyze`, {
       ...init,
       headers: { ...init.headers, "X-Analyze-Password": password },

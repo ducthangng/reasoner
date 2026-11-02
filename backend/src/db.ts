@@ -51,6 +51,7 @@ export async function migrate(): Promise<void> {
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5-2026-04-23';
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS effort text;
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS s3_key text;
+    ALTER TABLE papers ADD COLUMN IF NOT EXISTS instructions text;
     ALTER TABLE papers ALTER COLUMN pdf DROP NOT NULL;
     ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5-2026-04-23';
     ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS effort text;

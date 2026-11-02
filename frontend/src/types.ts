@@ -7,9 +7,44 @@ export interface PaperSummary {
   size_bytes: number;
   model: string;
   effort: Effort | null;
+  /** Extra instructions used for the latest analysis. */
+  instructions: string | null;
   status: Status;
   error: string | null;
   created_at: string;
+}
+
+export interface Method {
+  name: string;
+  kind: "proposed" | "existing" | "baseline" | "dataset" | "tool";
+  what_it_is: string;
+  used_for: string;
+  how_it_works: string;
+  eli5: string;
+  pages: number[];
+}
+
+export interface ResearchQuestion {
+  type: "hypothesis" | "research_question";
+  statement: string;
+  answer: string;
+  eli5: string;
+}
+
+export interface Gap {
+  type: "addressed" | "remaining";
+  gap: string;
+  eli5: string;
+}
+
+export interface Evaluation {
+  setup: string;
+  datasets: string[];
+  metrics: string[];
+  baselines: string[];
+  findings: string[];
+  validity: string;
+  eli5: string;
 }
 
 export type ConceptCategory = "foundation" | "method" | "math" | "domain" | "tool" | "metric" | "result";
@@ -37,10 +72,16 @@ export interface PaperAnalysis {
   venue: string;
   field: string;
   tldr: string;
+  /** Fields below marked optional are missing from analyses made before they were added. */
+  eli5?: string;
   summary: string;
   problem: string;
+  research_questions?: ResearchQuestion[];
+  gaps?: Gap[];
   key_contributions: string[];
   methodology: string;
+  methods?: Method[];
+  evaluation?: Evaluation;
   results: string;
   limitations: string[];
   reading_plan: string[];

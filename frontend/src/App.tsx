@@ -2,34 +2,44 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
 import { CompareView } from "./components/CompareView";
 import { InsightPanel } from "./components/InsightPanel";
-import { Library } from "./components/Library";
+import { LibraryGrid } from "./components/LibraryGrid";
 import { ModelPicker, useAiSettings } from "./components/ModelPicker";
 import { usePasswordPrompt } from "./components/PasswordDialog";
 import { PdfViewer } from "./components/PdfViewer";
+import { useRegenerateDialog } from "./components/RegenerateDialog";
 import type { ComparisonSummary, PaperSummary } from "./types";
 
-type View = "read" | "compare";
+type View = "library" | "read" | "compare";
 /** On narrow screens only one pane shows: the document/map ("main") or the notes/details ("side"). */
 export type Pane = "main" | "side";
 
-/** Reads "#/paper/<id>" or "#/compare/<id>" so a link opens a specific paper or map. */
-function readHash(): { view: View; id: string | null } {
+interface Route {
+  view: View;
+  id: string | null;
+}
+
+/** Reads "#/" (library), "#/paper/<id>" or "#/compare/<id>", so links and the back button work. */
+function readHash(): Route {
   const m = /^#\/(paper|compare)(?:\/([\w-]+))?/.exec(window.location.hash);
-  if (!m) return { view: "read", id: null };
-  return { view: m[1] === "compare" ? "compare" : "read", id: m[2] ?? null };
+  if (!m) return { view: "library", id: null };
+  if (m[1] === "paper") return m[2] ? { view: "read", id: m[2] } : { view: "library", id: null };
+  return { view: "compare", id: m[2] ?? null };
+}
+
+function hashFor({ view, id }: Route): string {
+  if (view === "library") return "#/";
+  return `#/${view === "read" ? "paper" : "compare"}${id ? `/${id}` : ""}`;
 }
 
 export default function App() {
-  const initial = readHash();
-  const [view, setView] = useState<View>(initial.view);
+  const [route, setRoute] = useState<Route>(readHash);
+  const { view } = route;
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [pane, setPane] = useState<Pane>("main");
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [comparisons, setComparisons] = useState<ComparisonSummary[]>([]);
-  const [selectedPaperId, setSelectedPaperId] = useState<string | null>(initial.view === "read" ? initial.id : null);
-  const [selectedComparisonId, setSelectedComparisonId] = useState<string | null>(
-    initial.view === "compare" ? initial.id : null,
-  );
+  const selectedPaperId = view === "read" ? route.id : null;
+  const selectedComparisonId = view === "compare" ? route.id : null;
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -39,6 +49,24 @@ export default function App() {
   const { ai } = aiChoice;
   const passwordPrompt = usePasswordPrompt();
   const askPassword = passwordPrompt.ask;
+  const regenerateDialog = useRegenerateDialog(ai);
+
+  /** Navigates and records a browser history entry (or replaces the current one). */
+  const go = useCallback((next: Route, replace = false) => {
+    const hash = hashFor(next);
+    if (window.location.hash !== hash) {
+      if (replace) history.replaceState(null, "", hash);
+      else history.pushState(null, "", hash);
+    }
+    setRoute(next);
+    setLibraryOpen(false);
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => setRoute(readHash());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -63,30 +91,18 @@ export default function App() {
     return () => clearInterval(t);
   }, [busy, refresh]);
 
-  useEffect(() => {
-    if (!selectedPaperId && papers.length) setSelectedPaperId(papers[0].id);
-  }, [papers, selectedPaperId]);
-
-  // Keep the URL in sync with what's open.
-  useEffect(() => {
-    const id = view === "read" ? selectedPaperId : selectedComparisonId;
-    const hash = `#/${view === "read" ? "paper" : "compare"}${id ? `/${id}` : ""}`;
-    if (window.location.hash !== hash) history.replaceState(null, "", hash);
-  }, [view, selectedPaperId, selectedComparisonId]);
-
-  const selectPaper = (id: string) => {
-    setSelectedPaperId(id);
-    setLibraryOpen(false);
+  const openPaper = (id: string) => {
     setPane("main");
+    go({ view: "read", id });
   };
-  const selectComparison = (id: string | null) => {
-    setSelectedComparisonId(id);
-    setLibraryOpen(false);
-  };
+  // Picking a map replaces the history entry, so auto-selecting the first map doesn't add one.
+  const selectComparison = useCallback((id: string | null) => go({ view: "compare", id }, true), [go]);
 
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
-      const pdfs = Array.from(files).filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+      const pdfs = Array.from(files).filter(
+        (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+      );
       if (!pdfs.length) {
         setUploadError("Drop a PDF file.");
         return;
@@ -99,8 +115,9 @@ export default function App() {
         try {
           const paper = await api.uploadPaper(file, ai, password);
           setPapers((prev) => [paper, ...prev]);
-          setSelectedPaperId(paper.id);
-          setView("read");
+          // Open a single upload straight away; several stay visible in the library.
+          if (pdfs.length === 1) go({ view: "read", id: paper.id });
+          else go({ view: "library", id: null });
         } catch (err) {
           setUploadError(pdfs.length > 1 ? `${file.name}: ${errorText(err)}` : errorText(err));
           // A wrong password would fail for every file, so stop here.
@@ -108,7 +125,7 @@ export default function App() {
         }
       }
     },
-    [ai, askPassword],
+    [ai, askPassword, go],
   );
 
   // Drop a PDF anywhere on the page.
@@ -149,12 +166,14 @@ export default function App() {
 
   const selectedPaper = papers.find((p) => p.id === selectedPaperId) ?? null;
 
-  const retryPaper = async (id: string) => {
-    const password = await askPassword("Enter the password to analyze this paper again.");
-    if (password === null) return;
+  /** Re-runs the analysis with the current model/mode and optional extra instructions. */
+  const regeneratePaper = async (paper: PaperSummary) => {
+    const title = paper.status === "error" ? "Try the analysis again" : "Regenerate analysis";
+    const request = await regenerateDialog.ask(title, paper.instructions ?? "");
+    if (!request) return;
     setUploadError(null);
     try {
-      await api.reanalyze(id, ai, password);
+      await api.reanalyze(paper.id, ai, request.password, request.instructions);
     } catch (err) {
       setUploadError(errorText(err));
     }
@@ -164,31 +183,34 @@ export default function App() {
   const deletePaper = async (id: string) => {
     if (!confirm("Delete this paper and its analysis?")) return;
     await api.deletePaper(id);
-    if (selectedPaperId === id) setSelectedPaperId(null);
+    if (selectedPaperId === id) go({ view: "library", id: null });
     await refresh();
   };
 
   const openConceptInPaper = (paperId: string, page?: number) => {
-    setSelectedPaperId(paperId);
-    setView("read");
-    setPane("main");
+    openPaper(paperId);
     if (page) setJump({ page, nonce: Date.now() });
   };
 
   return (
     <div className="app">
       <header className="topbar">
-        <button className="library-toggle" onClick={() => setLibraryOpen((o) => !o)} aria-label="Toggle library">
-          ☰ <span>{view === "read" ? "Library" : "Maps"}</span>
-        </button>
+        {view === "compare" && (
+          <button className="library-toggle" onClick={() => setLibraryOpen((o) => !o)} aria-label="Toggle maps">
+            ☰ <span>Maps</span>
+          </button>
+        )}
         <div className="brand">
           <span className="brand-mark">◆</span> Reasoner
         </div>
         <nav className="tabs">
-          <button className={view === "read" ? "active" : ""} onClick={() => setView("read")}>
-            Read
+          <button className={view !== "compare" ? "active" : ""} onClick={() => go({ view: "library", id: null })}>
+            Library
           </button>
-          <button className={view === "compare" ? "active" : ""} onClick={() => setView("compare")}>
+          <button
+            className={view === "compare" ? "active" : ""}
+            onClick={() => go({ view: "compare", id: selectedComparisonId })}
+          >
             Compare
           </button>
         </nav>
@@ -214,45 +236,61 @@ export default function App() {
 
       {loadError && <div className="banner">{loadError}</div>}
 
-      <div className="pane-switch" role="tablist">
-        <button className={pane === "main" ? "active" : ""} onClick={() => setPane("main")}>
-          {view === "read" ? "PDF" : "Map"}
-        </button>
-        <button className={pane === "side" ? "active" : ""} onClick={() => setPane("side")}>
-          {view === "read" ? "Notes" : "Details"}
-        </button>
-      </div>
+      {view !== "library" && (
+        <div className="pane-switch" role="tablist">
+          <button className={pane === "side" ? "active" : ""} onClick={() => setPane("side")}>
+            {view === "read" ? "Notes" : "Details"}
+          </button>
+          <button className={pane === "main" ? "active" : ""} onClick={() => setPane("main")}>
+            {view === "read" ? "PDF" : "Map"}
+          </button>
+        </div>
+      )}
 
-      {view === "read" ? (
-        <main className={`read-layout pane-${pane} ${libraryOpen ? "library-open" : ""}`}>
-          <div className="drawer-backdrop" onClick={() => setLibraryOpen(false)} />
-          <Library
-            papers={papers}
-            selectedId={selectedPaperId}
-            onSelect={selectPaper}
-            onDelete={deletePaper}
-            onRetry={retryPaper}
-          />
-          <section className="pdf-pane">
-            {selectedPaper ? (
-              <PdfViewer key={selectedPaper.id} url={api.pdfUrl(selectedPaper.id)} jump={jump} />
-            ) : (
-              <EmptyDrop onBrowse={() => fileInput.current?.click()} />
-            )}
-          </section>
+      {view === "library" && (
+        <LibraryGrid
+          papers={papers}
+          onOpen={openPaper}
+          onDelete={deletePaper}
+          onRetry={(id) => {
+            const paper = papers.find((p) => p.id === id);
+            if (paper) void regeneratePaper(paper);
+          }}
+          onUpload={() => fileInput.current?.click()}
+        />
+      )}
+
+      {view === "read" && (
+        <main className={`read-layout pane-${pane}`}>
           <aside className="insight-pane">
-            {selectedPaper && (
+            {selectedPaper ? (
               <InsightPanel
                 key={selectedPaper.id}
                 paper={selectedPaper}
-                onJumpToPage={(page) => setJump({ page, nonce: Date.now() })}
-                onRetry={() => retryPaper(selectedPaper.id)}
+                onJumpToPage={(page) => {
+                  setPane("main");
+                  setJump({ page, nonce: Date.now() });
+                }}
+                onRegenerate={() => regeneratePaper(selectedPaper)}
+                onBack={() => go({ view: "library", id: null })}
                 ai={ai}
               />
+            ) : (
+              <div className="insight-state">
+                <p className="muted">{papers.length ? "This paper no longer exists." : "Loading…"}</p>
+                <button className="link" onClick={() => go({ view: "library", id: null })}>
+                  ← Back to the library
+                </button>
+              </div>
             )}
           </aside>
+          <section className="pdf-pane">
+            {selectedPaper && <PdfViewer key={selectedPaper.id} url={api.pdfUrl(selectedPaper.id)} jump={jump} />}
+          </section>
         </main>
-      ) : (
+      )}
+
+      {view === "compare" && (
         <CompareView
           papers={papers}
           comparisons={comparisons}
@@ -267,6 +305,7 @@ export default function App() {
       )}
 
       {passwordPrompt.dialog}
+      {regenerateDialog.dialog}
 
       {dragging && (
         <div className="drop-overlay">
@@ -279,18 +318,4 @@ export default function App() {
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong";
-}
-
-function EmptyDrop({ onBrowse }: { onBrowse: () => void }) {
-  return (
-    <div className="empty-drop" onClick={onBrowse}>
-      <div className="empty-drop-icon">⇪</div>
-      <h2>Drop a scientific paper here</h2>
-      <p>
-        PDF only. Reasoner reads the whole paper and pulls out the key concepts you need to learn, a plain-language
-        summary, a reading plan, and self-check questions.
-      </p>
-      <button className="primary">Browse files</button>
-    </div>
-  );
 }

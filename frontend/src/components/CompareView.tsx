@@ -133,6 +133,34 @@ export function CompareView({
         </ul>
       </nav>
 
+      <aside className="insight-pane">
+        {result && (
+          <div className="insight">
+            <div className="insight-body">
+              {selection ? (
+                <SelectionDetail
+                  result={result}
+                  selection={selection}
+                  onSelect={setSelection}
+                  onOpenConcept={onOpenConcept}
+                />
+              ) : (
+                <div className="overview">
+                  <h4>How these papers relate</h4>
+                  <Markdown>{result.overview}</Markdown>
+                  <h4>Shared themes</h4>
+                  <ul>{result.shared_themes.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                  <h4>Key differences</h4>
+                  <ul>{result.key_differences.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                  <h4>Suggested learning path</h4>
+                  <ol>{result.learning_path.map((t, i) => <li key={i}>{t}</li>)}</ol>
+                  <p className="muted small">Tip: click a concept or a line in the map to see how things connect.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </aside>
       <section className="map-pane">
         {!selected && (
           <div className="insight-state">
@@ -168,34 +196,6 @@ export function CompareView({
         {result && <MindMap result={result} selection={selection} onSelect={setSelection} />}
       </section>
 
-      <aside className="insight-pane">
-        {result && (
-          <div className="insight">
-            <div className="insight-body">
-              {selection ? (
-                <SelectionDetail
-                  result={result}
-                  selection={selection}
-                  onSelect={setSelection}
-                  onOpenConcept={onOpenConcept}
-                />
-              ) : (
-                <div className="overview">
-                  <h4>How these papers relate</h4>
-                  <Markdown>{result.overview}</Markdown>
-                  <h4>Shared themes</h4>
-                  <ul>{result.shared_themes.map((t, i) => <li key={i}>{t}</li>)}</ul>
-                  <h4>Key differences</h4>
-                  <ul>{result.key_differences.map((t, i) => <li key={i}>{t}</li>)}</ul>
-                  <h4>Suggested learning path</h4>
-                  <ol>{result.learning_path.map((t, i) => <li key={i}>{t}</li>)}</ol>
-                  <p className="muted small">Tip: click a concept or a line in the map to see how things connect.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </aside>
     </main>
   );
 }

@@ -24,6 +24,23 @@ export const ConceptSchema = z.object({
   pages: z.array(z.number()).describe("1-indexed PDF pages where the concept appears or is defined"),
 });
 
+const ELI5_HINT =
+  "Explain it like I'm 5: 2-4 short sentences, simple everyday words, a concrete comparison from a child's world, no jargon";
+
+export const MethodSchema = z.object({
+  name: z.string().describe("The specific name of the method, model, algorithm, technique, dataset or tool"),
+  kind: z
+    .enum(["proposed", "existing", "baseline", "dataset", "tool"])
+    .describe("proposed: introduced by this paper; existing: prior method the paper builds on or uses; baseline: compared against; dataset/tool: data or software used"),
+  what_it_is: z.string().describe("A precise technical description of what it is"),
+  used_for: z.string().describe("What this paper uses it for, and why this choice"),
+  how_it_works: z
+    .string()
+    .describe("Step by step: inputs, the key steps or equations in words, outputs, important settings (markdown allowed)"),
+  eli5: z.string().describe(ELI5_HINT),
+  pages: z.array(z.number()).describe("1-indexed PDF pages where it is described or used"),
+});
+
 export const PaperAnalysisSchema = z.object({
   title: z.string(),
   authors: z.array(z.string()),
@@ -31,10 +48,46 @@ export const PaperAnalysisSchema = z.object({
   venue: z.string().describe("Journal/conference/preprint server, or empty string if unknown"),
   field: z.string().describe("Research field and sub-field"),
   tldr: z.string().describe("One or two sentences: what the paper does and why it matters"),
+  eli5: z.string().describe(`The whole paper, explained like I'm 5. ${ELI5_HINT}`),
   summary: z.string().describe("A 3-5 paragraph plain-language summary for a newcomer (markdown allowed)"),
   problem: z.string().describe("The problem the paper addresses and why it is hard"),
+  research_questions: z
+    .array(
+      z.object({
+        type: z.enum(["hypothesis", "research_question"]),
+        statement: z.string().describe("The hypothesis or question, stated precisely as the paper frames it"),
+        answer: z.string().describe("What the paper found about it: supported, refuted, or partially, with evidence"),
+        eli5: z.string().describe(ELI5_HINT),
+      }),
+    )
+    .describe("The paper's hypotheses and research questions, stated explicitly or clearly implied"),
+  gaps: z
+    .array(
+      z.object({
+        type: z
+          .enum(["addressed", "remaining"])
+          .describe("addressed: a gap in prior work this paper fills; remaining: a gap still open after this paper"),
+        gap: z.string().describe("The gap, specifically: what was missing, unknown or not working, and in which prior work"),
+        eli5: z.string().describe(ELI5_HINT),
+      }),
+    )
+    .describe("Research gaps: first the ones this paper addresses, then the ones that remain open"),
   key_contributions: z.array(z.string()),
-  methodology: z.string().describe("How the authors approach the problem, explained simply"),
+  methodology: z.string().describe("How the authors approach the problem: the overall pipeline, step by step"),
+  methods: z
+    .array(MethodSchema)
+    .describe("Every specific named method, model, algorithm, technique, dataset and tool the paper proposes or relies on"),
+  evaluation: z
+    .object({
+      setup: z.string().describe("How the authors test their claims: experimental design, procedure, conditions"),
+      datasets: z.array(z.string()).describe("Datasets, benchmarks, participants or data sources, with sizes when given"),
+      metrics: z.array(z.string()).describe("Each metric, with what it measures and whether higher or lower is better"),
+      baselines: z.array(z.string()).describe("What the proposed approach is compared against"),
+      findings: z.array(z.string()).describe("The key quantitative and qualitative results, with the actual numbers"),
+      validity: z.string().describe("How convincing the evaluation is: strengths, weaknesses, threats to validity"),
+      eli5: z.string().describe(ELI5_HINT),
+    })
+    .describe("How the paper evaluates its claims"),
   results: z.string().describe("The main findings, with key numbers where they help"),
   limitations: z.array(z.string()),
   reading_plan: z

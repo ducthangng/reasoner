@@ -26,7 +26,8 @@ papersRouter.param("id", (req, res, next, id) => {
   next();
 });
 
-const SUMMARY_COLUMNS = "id, filename, title, size_bytes, model, effort, status, error, created_at";
+const SUMMARY_COLUMNS = "id, filename, title, size_bytes, model, effort, instructions, status, error, created_at";
+const MAX_INSTRUCTIONS = 4000;
 
 papersRouter.get("/", async (_req, res) => {
   const { rows } = await pool.query(`SELECT ${SUMMARY_COLUMNS} FROM papers ORDER BY created_at DESC`);
@@ -94,11 +95,21 @@ papersRouter.get("/:id/pdf", async (req, res) => {
 });
 
 papersRouter.post("/:id/reanalyze", requireAnalyzePassword, async (req, res) => {
+  const raw = req.body?.instructions;
+  if (raw !== undefined && raw !== null && typeof raw !== "string") {
+    res.status(400).json({ error: "Instructions must be text." });
+    return;
+  }
+  const instructions = raw?.trim() || null;
+  if (instructions && instructions.length > MAX_INSTRUCTIONS) {
+    res.status(400).json({ error: `Instructions are too long (max ${MAX_INSTRUCTIONS} characters).` });
+    return;
+  }
   const { rows } = await pool.query(
-    `UPDATE papers SET status = 'processing', error = NULL, model = $2, effort = $3
+    `UPDATE papers SET status = 'processing', error = NULL, model = $2, effort = $3, instructions = $4
      WHERE id = $1 AND status <> 'processing'
      RETURNING ${SUMMARY_COLUMNS}`,
-    [req.params.id, resolveModel(req.body?.model), resolveEffort(req.body?.effort)],
+    [req.params.id, resolveModel(req.body?.model), resolveEffort(req.body?.effort), instructions],
   );
   if (!rows[0]) {
     res.status(409).json({ error: "Paper not found or already processing" });

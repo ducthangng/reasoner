@@ -38,11 +38,18 @@ export async function ensureFileId(paperId: string): Promise<string> {
 export async function runAnalysis(paperId: string): Promise<void> {
   try {
     const fileId = await ensureFileId(paperId);
-    const { rows } = await pool.query<{ model: string; effort: string | null }>(
-      "SELECT model, effort FROM papers WHERE id = $1",
+    const { rows } = await pool.query<{ model: string; effort: string | null; instructions: string | null }>(
+      "SELECT model, effort, instructions FROM papers WHERE id = $1",
       [paperId],
     );
-    const analysis = await analyzePaper({ model: rows[0].model, effort: resolveEffort(rows[0].effort) }, fileId);
+    const analysis = await analyzePaper(
+      { model: rows[0].model, effort: resolveEffort(rows[0].effort) },
+      fileId,
+      rows[0].instructions,
+    );
+    for (const m of analysis.methods) {
+      m.pages = [...new Set(m.pages.map(Math.round).filter((p) => p >= 1))].sort((a, b) => a - b);
+    }
     for (const c of analysis.concepts) {
       c.pages = [...new Set(c.pages.map(Math.round).filter((p) => p >= 1))].sort((a, b) => a - b);
     }
