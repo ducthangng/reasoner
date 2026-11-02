@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { CompareView } from "./components/CompareView";
 import { InsightPanel } from "./components/InsightPanel";
 import { Library } from "./components/Library";
 import { ModelPicker, useAiSettings } from "./components/ModelPicker";
+import { usePasswordPrompt } from "./components/PasswordDialog";
 import { PdfViewer } from "./components/PdfViewer";
 import type { ComparisonSummary, PaperSummary } from "./types";
 
@@ -22,6 +23,8 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const aiChoice = useAiSettings();
   const { ai } = aiChoice;
+  const passwordPrompt = usePasswordPrompt();
+  const askPassword = passwordPrompt.ask;
 
   const refresh = useCallback(async () => {
     try {
@@ -58,18 +61,23 @@ export default function App() {
         return;
       }
       setUploadError(null);
+      const names = pdfs.length === 1 ? `"${pdfs[0].name}"` : `${pdfs.length} papers`;
+      const password = await askPassword(`Enter the password to analyze ${names}.`);
+      if (password === null) return;
       for (const file of pdfs) {
         try {
-          const paper = await api.uploadPaper(file, ai);
+          const paper = await api.uploadPaper(file, ai, password);
           setPapers((prev) => [paper, ...prev]);
           setSelectedPaperId(paper.id);
           setView("read");
         } catch (err) {
-          setUploadError(`${file.name}: ${err instanceof Error ? err.message : "upload failed"}`);
+          setUploadError(pdfs.length > 1 ? `${file.name}: ${errorText(err)}` : errorText(err));
+          // A wrong password would fail for every file, so stop here.
+          if (err instanceof ApiError && err.status === 401) return;
         }
       }
     },
-    [ai],
+    [ai, askPassword],
   );
 
   // Drop a PDF anywhere on the page.
@@ -111,7 +119,14 @@ export default function App() {
   const selectedPaper = papers.find((p) => p.id === selectedPaperId) ?? null;
 
   const retryPaper = async (id: string) => {
-    await api.reanalyze(id, ai);
+    const password = await askPassword("Enter the password to analyze this paper again.");
+    if (password === null) return;
+    setUploadError(null);
+    try {
+      await api.reanalyze(id, ai, password);
+    } catch (err) {
+      setUploadError(errorText(err));
+    }
     await refresh();
   };
 
@@ -162,7 +177,7 @@ export default function App() {
         </div>
       </header>
 
-      {loadError && <div className="banner">Can't reach the API: {loadError}</div>}
+      {loadError && <div className="banner">{loadError}</div>}
 
       {view === "read" ? (
         <main className="read-layout">
@@ -204,6 +219,8 @@ export default function App() {
         />
       )}
 
+      {passwordPrompt.dialog}
+
       {dragging && (
         <div className="drop-overlay">
           <div>Drop PDF to analyze</div>
@@ -211,6 +228,10 @@ export default function App() {
       )}
     </div>
   );
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : "Something went wrong";
 }
 
 function EmptyDrop({ onBrowse }: { onBrowse: () => void }) {

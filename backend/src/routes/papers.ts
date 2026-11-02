@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { requireAnalyzePassword } from "../auth.js";
 import { pool } from "../db.js";
 import { ensureFileId, runAnalysis } from "../jobs.js";
 import {
@@ -31,7 +32,7 @@ papersRouter.get("/", async (_req, res) => {
   res.json(rows);
 });
 
-papersRouter.post("/", upload.single("file"), async (req, res) => {
+papersRouter.post("/", requireAnalyzePassword, upload.single("file"), async (req, res) => {
   const file = req.file;
   if (!file) {
     res.status(400).json({ error: "Upload a PDF in the 'file' field." });
@@ -78,7 +79,7 @@ papersRouter.get("/:id/pdf", async (req, res) => {
   res.send(rows[0].pdf);
 });
 
-papersRouter.post("/:id/reanalyze", async (req, res) => {
+papersRouter.post("/:id/reanalyze", requireAnalyzePassword, async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE papers SET status = 'processing', error = NULL, model = $2, effort = $3
      WHERE id = $1 AND status <> 'processing'

@@ -112,7 +112,7 @@ export interface AiSettings {
 
 export interface ModelList {
   default: string;
-  models: string[];
+  models: { id: string; note: string }[];
   efforts: Effort[];
   error?: string;
 }

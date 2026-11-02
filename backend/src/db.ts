@@ -47,9 +47,9 @@ export async function migrate(): Promise<void> {
 
     -- Columns added after the first version, for databases created before them.
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS openai_file_id text;
-    ALTER TABLE papers ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5';
+    ALTER TABLE papers ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5-2026-04-23';
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS effort text;
-    ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5';
+    ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5-2026-04-23';
     ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS effort text;
   `);
 

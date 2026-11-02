@@ -2,9 +2,13 @@ import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import { MulterError } from "multer";
 import { migrate } from "./db.js";
-import { DEFAULT_MODEL, describeApiError, EFFORTS, listModels } from "./llm.js";
+import { DEFAULT_MODEL, describeApiError, EFFORTS, listModels, RESEARCH_MODELS } from "./llm.js";
 import { comparisonsRouter } from "./routes/comparisons.js";
 import { papersRouter } from "./routes/papers.js";
+
+for (const name of ["OPENAI_API_KEY", "DATABASE_URL", "ANALYZE_PASSWORD"]) {
+  if (!process.env[name]) console.warn(`Warning: ${name} is not set. See backend/.env.example.`);
+}
 
 const app = express();
 
@@ -21,12 +25,12 @@ app.get("/health", (_req, res) => {
 app.get("/api/models", async (_req, res) => {
   try {
     const models = await listModels();
-    res.json({ default: DEFAULT_MODEL, models: models.map((m) => m.id), efforts: EFFORTS });
+    res.json({ default: DEFAULT_MODEL, models, efforts: EFFORTS });
   } catch (err) {
     // Still let the UI work with the default model if listing fails.
     res.json({
       default: DEFAULT_MODEL,
-      models: [],
+      models: RESEARCH_MODELS,
       efforts: EFFORTS,
       error: describeApiError(err) ?? "Could not list models",
     });
@@ -46,7 +50,15 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 app.use(errorHandler);
 
 const port = Number(process.env.PORT ?? 8080);
-await migrate();
+try {
+  await migrate();
+} catch (err) {
+  console.error(
+    `Could not connect to Postgres at DATABASE_URL. Is the database running? (Locally: npm run db:local)\n`,
+    err instanceof Error ? err.message : err,
+  );
+  process.exit(1);
+}
 app.listen(port, () => {
   console.log(`Reasoner API listening on :${port}`);
 });

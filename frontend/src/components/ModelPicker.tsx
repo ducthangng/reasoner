@@ -4,7 +4,6 @@ import type { AiSettings, Effort } from "../types";
 
 const MODEL_KEY = "reasoner.model";
 const EFFORT_KEY = "reasoner.effort";
-const CUSTOM = "__custom__";
 const MODEL_DEFAULT_EFFORT = "default";
 
 export const EFFORT_LABEL: Record<Effort, string> = {
@@ -21,7 +20,7 @@ export interface AiChoice {
   ai: AiSettings;
   setModel: (m: string) => void;
   setEffort: (e: Effort | null) => void;
-  available: string[];
+  available: { id: string; note: string }[];
   efforts: Effort[];
   defaultModel: string;
   listError: string | null;
@@ -34,7 +33,7 @@ export function useAiSettings(): AiChoice {
     const saved = localStorage.getItem(EFFORT_KEY);
     return saved === null ? "high" : saved === MODEL_DEFAULT_EFFORT ? null : (saved as Effort);
   });
-  const [available, setAvailable] = useState<string[]>([]);
+  const [available, setAvailable] = useState<{ id: string; note: string }[]>([]);
   const [efforts, setEfforts] = useState<Effort[]>(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
   const [defaultModel, setDefaultModel] = useState("");
   const [listError, setListError] = useState<string | null>(null);
@@ -47,6 +46,8 @@ export function useAiSettings(): AiChoice {
         setEfforts(list.efforts);
         setDefaultModel(list.default);
         setListError(list.error ?? null);
+        // Forget a saved model that is no longer offered.
+        setModelState((saved) => (list.models.some((m) => m.id === saved) ? saved : ""));
       })
       .catch((err) => setListError(err instanceof Error ? err.message : "Could not load models"));
   }, []);
@@ -74,55 +75,20 @@ export function aiLabel(model: string, effort: Effort | null): string {
 }
 
 export function ModelPicker({ ai, setModel, setEffort, available, efforts, defaultModel, listError }: AiChoice) {
-  const options = [...new Set([defaultModel, ...available].filter(Boolean))];
-  const isCustom = !!ai.model && !options.includes(ai.model);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-
   return (
     <div className="model-picker">
-      {editing ? (
-        <form
-          className="model-picker"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (draft.trim()) setModel(draft.trim());
-            setEditing(false);
-          }}
-        >
-          <input autoFocus placeholder="Model id, e.g. gpt-5.5" value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button className="link small" type="submit">
-            Use
-          </button>
-          <button className="link small" type="button" onClick={() => setEditing(false)}>
-            Cancel
-          </button>
-        </form>
-      ) : (
-        <label className="model-picker" title={listError ?? "Model used for new analyses, maps and chat"}>
-          <span className="muted small">Model</span>
-          <select
-            value={ai.model}
-            onChange={(e) => {
-              if (e.target.value === CUSTOM) {
-                setDraft(ai.model);
-                setEditing(true);
-              } else {
-                setModel(e.target.value);
-              }
-            }}
-          >
-            {isCustom && <option value={ai.model}>{ai.model}</option>}
-            {options.map((m) => (
-              <option key={m} value={m}>
-                {m}
-                {m === defaultModel ? " (default)" : ""}
-              </option>
-            ))}
-            <option value={CUSTOM}>Custom model id…</option>
-          </select>
-        </label>
-      )}
+      <label className="model-picker" title={listError ?? "Model used for new analyses, maps and chat"}>
+        <span className="muted small">Model</span>
+        <select value={ai.model} disabled={!available.length} onChange={(e) => setModel(e.target.value)}>
+          {!available.length && <option value={ai.model}>{listError ? "Backend unreachable" : "Loading…"}</option>}
+          {available.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.id}
+              {m.id === defaultModel ? " (default)" : m.note ? ` (${m.note})` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
       <label
         className="model-picker"
         title="Reasoning effort: how long the model thinks before answering. Higher is deeper but slower and more expensive. Not every model supports every level."

@@ -10,38 +10,44 @@ import {
 } from "./schemas.js";
 
 const client = new OpenAI();
-export const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.5";
 
 export class LLMError extends Error {}
 
 // ---------- Models ----------
 
-export interface ModelInfo {
-  id: string;
-  created: number;
-}
+/** Models offered in the UI: current text models with reasoning that accept PDFs, newest first. */
+export const RESEARCH_MODELS = [
+  { id: "gpt-5.6-sol", note: "" },
+  { id: "gpt-5.6-luna", note: "" },
+  { id: "gpt-5.5-pro", note: "slow, expensive" },
+  { id: "gpt-5.5-2026-04-23", note: "" },
+  { id: "gpt-5.2-pro", note: "slow, expensive" },
+  { id: "gpt-5.4-2026-03-05", note: "" },
+  { id: "gpt-5.4-mini", note: "fast, cheap" },
+  { id: "gpt-5.1", note: "" },
+] as const;
 
-// Text models that can read PDFs. Excludes audio/image/embedding/etc. and dated snapshots to keep the list short.
-const INCLUDE = /^(gpt-[4-9]|o\d|chatgpt-)/;
-const EXCLUDE =
-  /(audio|realtime|tts|transcribe|image|search|embedding|moderation|computer|instruct|codex|deep-research|\d{4}-\d{2}-\d{2}$)|^gpt-4(-|$)/;
+export const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.5-2026-04-23";
+const ALLOWED = new Set<string>([...RESEARCH_MODELS.map((m) => m.id), DEFAULT_MODEL]);
 
-let modelCache: { at: number; models: ModelInfo[] } | null = null;
+let availableCache: { at: number; ids: Set<string> } | null = null;
 
-export async function listModels(): Promise<ModelInfo[]> {
-  if (modelCache && Date.now() - modelCache.at < 10 * 60_000) return modelCache.models;
-  const models: ModelInfo[] = [];
-  for await (const m of client.models.list()) {
-    if (INCLUDE.test(m.id) && !EXCLUDE.test(m.id)) models.push({ id: m.id, created: m.created });
+/** The research models this API key can use. Falls back to the full list if OpenAI can't be asked. */
+export async function listModels(): Promise<{ id: string; note: string }[]> {
+  const all: { id: string; note: string }[] = RESEARCH_MODELS.map((m) => ({ id: m.id, note: m.note }));
+  if (!RESEARCH_MODELS.some((m) => m.id === DEFAULT_MODEL)) all.unshift({ id: DEFAULT_MODEL, note: "" });
+  if (!availableCache || Date.now() - availableCache.at > 10 * 60_000) {
+    const ids = new Set<string>();
+    for await (const m of client.models.list()) ids.add(m.id);
+    availableCache = { at: Date.now(), ids };
   }
-  models.sort((a, b) => b.created - a.created);
-  modelCache = { at: Date.now(), models };
-  return models;
+  const usable = all.filter((m) => availableCache!.ids.has(m.id));
+  return usable.length ? usable : all;
 }
 
-const MODEL_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+/** Only models from the research list (or the configured default) are accepted. */
 export function resolveModel(requested: unknown): string {
-  return typeof requested === "string" && MODEL_ID.test(requested) ? requested : DEFAULT_MODEL;
+  return typeof requested === "string" && ALLOWED.has(requested) ? requested : DEFAULT_MODEL;
 }
 
 export const EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;

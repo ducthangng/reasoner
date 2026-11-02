@@ -12,9 +12,9 @@ backend/    Node + Express + TypeScript → Railway (with Railway Postgres)
 
 ## How it works
 
-- **Model and mode:** the **Model** menu in the top bar lists the models your OpenAI key can use (from the
-  `/v1/models` endpoint, minus audio, image, embedding and dated snapshot models). You can also type any model id
-  under "Custom model id…". The **Mode** menu sets the reasoning effort: Model default, None, Minimal, Low,
+- **Model and mode:** the **Model** menu offers a fixed list of current OpenAI models suited to research, set in
+  `RESEARCH_MODELS` in `backend/src/llm.ts`, minus any your key can't use. The backend rejects models outside that
+  list. The **Mode** menu sets the reasoning effort: Model default, None, Minimal, Low,
   Medium, High (the starting choice), Extra high or Max. Higher modes think longer, so they are slower and cost
   more. Not every model supports every level; if a model rejects one, the error says so and you can pick another.
   Both choices are saved in your browser and apply to new analyses, maps and chat messages. Each paper and map
@@ -32,15 +32,22 @@ backend/    Node + Express + TypeScript → Railway (with Railway Postgres)
   It returns typed links (`same`, `similar`, `extends`, `prerequisite`, `applies`, `part_of`, `contrasts`). The
   backend checks each link and drops any that don't point at a real concept.
 
+- **Password:** starting or re-running an analysis asks for a password, which the backend checks against
+  `ANALYZE_PASSWORD`. A wrong password is rejected before the PDF is stored or sent to OpenAI. If
+  `ANALYZE_PASSWORD` is not set, no analysis can start.
+
 ## Run locally
 
-You need Node 22+, a Postgres database and an OpenAI API key.
+You need Node 22+ and an OpenAI API key. You don't need to install Postgres; `npm run db:local` runs one.
 
 ```bash
-# backend
+# backend: terminal 1, the database (data is kept in backend/.pgdata)
 cd backend
-cp .env.example .env        # fill in OPENAI_API_KEY and DATABASE_URL
 npm install
+npm run db:local
+
+# backend: terminal 2, the API
+cp .env.example .env        # fill in OPENAI_API_KEY and ANALYZE_PASSWORD
 npm run dev                 # http://localhost:8080 (tables are created on startup)
 
 # frontend
@@ -61,7 +68,8 @@ Push this repo to GitHub first. Both Vercel and Railway deploy from a GitHub rep
    build and start commands and the `/health` health check.
 3. Set these service variables:
    - `OPENAI_API_KEY`: your key
-   - `OPENAI_MODEL` (optional): the default model, `gpt-5.5` if unset
+   - `ANALYZE_PASSWORD`: the password users must enter to analyze a paper
+   - `OPENAI_MODEL` (optional): the default model, `gpt-5.5-2026-04-23` if unset
    - `DATABASE_URL`: `${{Postgres.DATABASE_URL}}` (a reference to the database; it uses the private network, so no SSL is needed)
    - `CORS_ORIGINS`: your Vercel URL, e.g. `https://reasoner.vercel.app` (comma-separate several)
 4. Generate a public domain for the service under Settings → Networking.
@@ -77,22 +85,22 @@ Push this repo to GitHub first. Both Vercel and Railway deploy from a GitHub rep
 | Variable (backend) | Default | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | none (required) | OpenAI API key |
+| `ANALYZE_PASSWORD` | none (required) | Password needed to start an analysis |
 | `DATABASE_URL` | none (required) | Postgres connection string |
 | `PGSSL` | `false` | Set to `true` for Postgres URLs that require SSL (e.g. Railway's public URL) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Allowed frontend origins |
-| `OPENAI_MODEL` | `gpt-5.5` | Default model. Users can choose another in the app |
+| `OPENAI_MODEL` | `gpt-5.5-2026-04-23` | Default model. Users choose from `RESEARCH_MODELS` in the app |
 
 ## Known limitations
 
-- **No authentication.** Anyone who has the backend URL can upload papers and spend your API credits. Add auth
-  (e.g. Clerk or Supabase Auth, or at least a shared access token) before you share the URL publicly.
+- **Only analysis is password-protected.** Anyone who has the URL can still create mind maps, chat with papers
+  (both call OpenAI) and delete papers.
 - Background jobs run inside the API process. If it restarts during an analysis, that paper is marked failed and
   you can retry it from the UI. For heavy use, move the jobs to a queue.
 - PDFs are stored in Postgres (`bytea`). That works for a personal library. For larger volumes, move them to object
   storage such as a Railway bucket or S3.
 - The model must accept PDF input (current GPT and o-series models do). OpenAI limits how large a PDF a request
   can include, so very long papers may be rejected.
-- Anyone using the app can pick any model your key can access, including expensive ones.
 
 ## Cost
 

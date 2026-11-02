@@ -10,11 +10,25 @@ import type {
 
 export const API_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, init);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, init);
+  } catch {
+    throw new ApiError(`Can't reach the API at ${API_URL}. Is the backend running?`, 0);
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error ?? `Request failed (${res.status})`);
+    throw new ApiError(body?.error ?? `Request failed (${res.status})`, res.status);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
@@ -30,14 +44,24 @@ export const api = {
   listPapers: () => request<PaperSummary[]>("/api/papers"),
   getPaper: (id: string) => request<PaperDetail>(`/api/papers/${id}`),
   pdfUrl: (id: string) => `${API_URL}/api/papers/${id}/pdf`,
-  uploadPaper: (file: File, ai: AiSettings) => {
+  uploadPaper: (file: File, ai: AiSettings, password: string) => {
     const form = new FormData();
     form.append("model", ai.model);
     if (ai.effort) form.append("effort", ai.effort);
     form.append("file", file);
-    return request<PaperSummary>("/api/papers", { method: "POST", body: form });
+    return request<PaperSummary>("/api/papers", {
+      method: "POST",
+      body: form,
+      headers: { "X-Analyze-Password": password },
+    });
   },
-  reanalyze: (id: string, ai: AiSettings) => request<PaperSummary>(`/api/papers/${id}/reanalyze`, json(ai)),
+  reanalyze: (id: string, ai: AiSettings, password: string) => {
+    const init = json(ai);
+    return request<PaperSummary>(`/api/papers/${id}/reanalyze`, {
+      ...init,
+      headers: { ...init.headers, "X-Analyze-Password": password },
+    });
+  },
   deletePaper: (id: string) => request<void>(`/api/papers/${id}`, { method: "DELETE" }),
 
   getChat: (id: string) => request<ChatMessage[]>(`/api/papers/${id}/chat`),
