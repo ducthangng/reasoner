@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { ChatMessage } from "../types";
+import type { AiSettings, ChatMessage } from "../types";
 import { Markdown } from "./Markdown";
+import { aiLabel } from "./ModelPicker";
 
 const SUGGESTIONS = [
   "Explain the main idea like I'm a first-year student.",
@@ -10,7 +11,7 @@ const SUGGESTIONS = [
   "What would a skeptical reviewer criticize?",
 ];
 
-export function AskTab({ paperId, model }: { paperId: string; model: string }) {
+export function AskTab({ paperId, ai }: { paperId: string; ai: AiSettings }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -32,7 +33,7 @@ export function AskTab({ paperId, model }: { paperId: string; model: string }) {
     setPending(true);
     setMessages((m) => [...m, { role: "user", content: question }, { role: "assistant", content: "" }]);
     try {
-      await api.ask(paperId, question, model, (delta) =>
+      await api.ask(paperId, question, ai, (delta) =>
         setMessages((m) => {
           const last = m[m.length - 1];
           return [...m.slice(0, -1), { ...last, content: last.content + delta }];
@@ -52,7 +53,7 @@ export function AskTab({ paperId, model }: { paperId: string; model: string }) {
       <div className="ask-messages">
         {messages.length === 0 && (
           <div className="suggestions">
-            <p className="muted small">Ask anything about this paper. Answers cite pages. Using {model}.</p>
+            <p className="muted small">Ask anything about this paper. Answers cite pages. Using {aiLabel(ai.model, ai.effort)}.</p>
             {SUGGESTIONS.map((s) => (
               <button key={s} className="suggestion" onClick={() => send(s)}>
                 {s}

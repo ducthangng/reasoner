@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { ComparisonDetail, ComparisonSummary, PaperSummary } from "../types";
+import type { AiSettings, ComparisonDetail, ComparisonSummary, PaperSummary } from "../types";
 import { Markdown } from "./Markdown";
 import { MindMap, type MapSelection } from "./MindMap";
+import { aiLabel } from "./ModelPicker";
 import { RELATION_STYLE } from "./relations";
 import { StatusDot } from "./StatusDot";
 
@@ -13,10 +14,10 @@ interface Props {
   onSelect: (id: string | null) => void;
   onChanged: () => Promise<void>;
   onOpenConcept: (paperId: string, page?: number) => void;
-  model: string;
+  ai: AiSettings;
 }
 
-export function CompareView({ papers, comparisons, selectedId, onSelect, onChanged, onOpenConcept, model }: Props) {
+export function CompareView({ papers, comparisons, selectedId, onSelect, onChanged, onOpenConcept, ai }: Props) {
   const ready = papers.filter((p) => p.status === "ready");
   const [picked, setPicked] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
@@ -50,7 +51,7 @@ export function CompareView({ papers, comparisons, selectedId, onSelect, onChang
     setCreating(true);
     setError(null);
     try {
-      const c = await api.createComparison(picked, model);
+      const c = await api.createComparison(picked, ai);
       setPicked([]);
       await onChanged();
       onSelect(c.id);
@@ -84,7 +85,7 @@ export function CompareView({ papers, comparisons, selectedId, onSelect, onChang
           <button className="primary block" disabled={picked.length < 2 || creating} onClick={create}>
             {creating ? "Starting…" : "Connect the dots"}
           </button>
-          <p className="muted small">Uses {model}</p>
+          <p className="muted small">Uses {aiLabel(ai.model, ai.effort)}</p>
           {error && <p className="error-text small">{error}</p>}
         </div>
 
@@ -98,7 +99,7 @@ export function CompareView({ papers, comparisons, selectedId, onSelect, onChang
                 <div className="muted small">
                   {c.status === "processing" ? "Researching connections…" : new Date(c.created_at).toLocaleDateString()}
                   {" · "}
-                  {c.model}
+                  {aiLabel(c.model, c.effort)}
                 </div>
               </div>
               <button
@@ -142,11 +143,11 @@ export function CompareView({ papers, comparisons, selectedId, onSelect, onChang
             <button
               className="primary"
               onClick={async () => {
-                await api.retryComparison(selected.id, model);
+                await api.retryComparison(selected.id, ai);
                 await onChanged();
               }}
             >
-              Retry with {model}
+              Retry with {aiLabel(ai.model, ai.effort)}
             </button>
           </div>
         )}

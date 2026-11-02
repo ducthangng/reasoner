@@ -913,3 +913,47 @@ h5 {
 .chip-row.tight {
   margin: 8px 0 0;
 }
+
+/* ---------- Relevance tiers ---------- */
+.tier-essential {
+  --t: #b91c1c;
+}
+.tier-important {
+  --t: #c2410c;
+}
+.tier-helpful {
+  --t: #0369a1;
+}
+.tier-peripheral {
+  --t: #a8a29e;
+}
+.chip[class*="tier-"]:not(.on) {
+  color: var(--t);
+  border-color: color-mix(in srgb, var(--t) 35%, transparent);
+}
+.tier-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 16px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid color-mix(in srgb, var(--t) 40%, transparent);
+}
+.tier-name {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--t);
+}
+.node-term {
+  flex: 1;
+}
+.tier-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--t);
+  flex-shrink: 0;
+  align-self: center;
+}

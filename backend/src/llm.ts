@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { ResponseInputItem } from "openai/resources/responses/responses";
+import type { ReasoningEffort } from "openai/resources/shared";
 import {
   ComparisonModelSchema,
   PaperAnalysisSchema,
@@ -10,7 +11,6 @@ import {
 
 const client = new OpenAI();
 export const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.5";
-const CONCEPT_COUNT = Number(process.env.CONCEPT_COUNT ?? 25);
 
 export class LLMError extends Error {}
 
@@ -44,9 +44,23 @@ export function resolveModel(requested: unknown): string {
   return typeof requested === "string" && MODEL_ID.test(requested) ? requested : DEFAULT_MODEL;
 }
 
-/** Reasoning models (o-series, GPT-5 and later, except chat variants) accept a reasoning effort. */
-function reasoningFor(model: string, effort: "medium" | "high") {
-  return /^(o\d|gpt-([5-9]|\d\d))/.test(model) && !model.includes("chat") ? { reasoning: { effort } } : {};
+export const EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORTS)[number];
+
+/** A valid effort level, or null to leave it to the model's default. */
+export function resolveEffort(requested: unknown): Effort | null {
+  return EFFORTS.includes(requested as Effort) ? (requested as Effort) : null;
+}
+
+export interface AiSettings {
+  model: string;
+  /** null = don't send a reasoning effort; the model uses its default. */
+  effort: Effort | null;
+}
+
+function modelParams({ model, effort }: AiSettings) {
+  const reasoning: { effort: ReasoningEffort } | undefined = effort ? { effort } : undefined;
+  return reasoning ? { model, reasoning } : { model };
 }
 
 // ---------- Files ----------
@@ -109,10 +123,9 @@ function pdfInput(fileId: string) {
   return { type: "input_file" as const, file_id: fileId };
 }
 
-export async function analyzePaper(model: string, fileId: string): Promise<PaperAnalysis> {
+export async function analyzePaper(ai: AiSettings, fileId: string): Promise<PaperAnalysis> {
   const stream = client.responses.stream({
-    model,
-    ...reasoningFor(model, "high"),
+    ...modelParams(ai),
     instructions: MENTOR,
     text: { format: zodTextFormat(PaperAnalysisSchema, "paper_analysis") },
     input: [
@@ -124,11 +137,23 @@ export async function analyzePaper(model: string, fileId: string): Promise<Paper
             type: "input_text",
             text: `Analyze this paper for a motivated learner who is new to the field.
 
-Identify the ${CONCEPT_COUNT} most important concepts a newcomer must understand to follow this paper — the
-background ideas, methods, mathematical tools, metrics and domain terms it relies on — ordered from most to least
-important. Prefer concepts that unlock understanding of the paper over trivia. For each concept, teach it from
-scratch, explain its specific role in this paper, and list the PDF pages (1-indexed, as the PDF viewer counts
-them) where it appears. Prerequisites should reference other concepts in your list by their exact term when possible.
+Identify the concepts a newcomer must understand to follow this paper: the background ideas, methods,
+mathematical tools, metrics and domain terms it relies on. You decide how many. A short, focused paper may need only
+a handful, while a dense paper that spans several fields may need many more. Include every concept that genuinely
+helps a learner understand the paper, and don't pad the list with trivia.
+
+Rank the concepts by how much a learner needs them to understand this paper, most essential first. Give each one
+a relevance tier:
+- essential: you cannot follow the paper's core argument without it
+- important: needed to understand a major section, method or result
+- helpful: deepens understanding of details, experiments or context
+- peripheral: mentioned in passing or useful background only
+The list must be ordered so that every essential concept comes before every important one, and so on, with the
+most relevant concept first within each tier.
+
+For each concept, teach it from scratch, explain its specific role in this paper and why it has its rank, and list
+the PDF pages (1-indexed, as the PDF viewer counts them) where it appears. Prerequisites should reference other
+concepts in your list by their exact term when possible.
 
 Also write the summary, reading plan and self-check questions described in the output schema.`,
           },
@@ -148,19 +173,18 @@ export interface ComparisonInput {
   analysis: PaperAnalysis;
 }
 
-export async function comparePapers(model: string, papers: ComparisonInput[]): Promise<ComparisonModelOutput> {
+export async function comparePapers(ai: AiSettings, papers: ComparisonInput[]): Promise<ComparisonModelOutput> {
   const conceptIndex = papers
     .map((p) => {
       const concepts = p.analysis.concepts
-        .map((c, i) => `  ${p.label}.c${i + 1}: ${c.term} — ${c.short_definition}`)
+        .map((c, i) => `  ${p.label}.c${i + 1} [${c.relevance}]: ${c.term} — ${c.short_definition}`)
         .join("\n");
       return `Paper ${p.label}: "${p.analysis.title}"\nTL;DR: ${p.analysis.tldr}\nConcepts:\n${concepts}`;
     })
     .join("\n\n");
 
   const stream = client.responses.stream({
-    model,
-    ...reasoningFor(model, "high"),
+    ...modelParams(ai),
     instructions: MENTOR,
     text: { format: zodTextFormat(ComparisonModelSchema, "paper_comparison") },
     input: [
@@ -199,7 +223,7 @@ export interface ChatTurn {
 }
 
 export async function chatAboutPaper(
-  model: string,
+  ai: AiSettings,
   fileId: string,
   history: ChatTurn[],
   question: string,
@@ -214,8 +238,7 @@ export async function chatAboutPaper(
   );
 
   const stream = client.responses.stream({
-    model,
-    ...reasoningFor(model, "medium"),
+    ...modelParams(ai),
     instructions: `${MENTOR}
 You are tutoring a learner who is reading the attached paper. Answer their questions grounded in the paper,
 cite page numbers like (p. 4) when you refer to specific content, and explain background knowledge when they
@@ -230,6 +253,8 @@ need it. Keep answers focused; use markdown for structure when it helps.`,
 
 export function describeApiError(err: unknown): string | null {
   if (err instanceof OpenAI.AuthenticationError) return "The server's OpenAI API key is missing or invalid.";
+  if (err instanceof OpenAI.BadRequestError)
+    return `OpenAI rejected the request: ${err.message}. Not every model supports every reasoning level, so try another level or "Model default".`;
   if (err instanceof OpenAI.RateLimitError) return "OpenAI rate limit or quota reached. Retry in a minute.";
   if (err instanceof OpenAI.NotFoundError) return `OpenAI: ${err.message} (does your key have access to this model?)`;
   if (err instanceof OpenAI.APIError) return `OpenAI API error (${err.status}): ${err.message}`;

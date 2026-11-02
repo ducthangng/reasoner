@@ -200,7 +200,10 @@ export function MindMap({ result, selection, onSelect }: Props) {
                     onClick={() => onSelect(isSelected ? null : { kind: "node", paperId: paper.id, concept: i })}
                   >
                     <span className="rank">{i + 1}</span>
-                    {c.term}
+                    <span className="node-term">{c.term}</span>
+                    {c.relevance && (
+                      <span className={`tier-pip tier-${c.relevance}`} title={`${c.relevance} to its paper`} />
+                    )}
                   </button>
                 );
               })}

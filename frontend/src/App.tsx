@@ -3,7 +3,7 @@ import { api } from "./api";
 import { CompareView } from "./components/CompareView";
 import { InsightPanel } from "./components/InsightPanel";
 import { Library } from "./components/Library";
-import { ModelPicker, useModelChoice } from "./components/ModelPicker";
+import { ModelPicker, useAiSettings } from "./components/ModelPicker";
 import { PdfViewer } from "./components/PdfViewer";
 import type { ComparisonSummary, PaperSummary } from "./types";
 
@@ -20,8 +20,8 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const modelChoice = useModelChoice();
-  const { model } = modelChoice;
+  const aiChoice = useAiSettings();
+  const { ai } = aiChoice;
 
   const refresh = useCallback(async () => {
     try {
@@ -60,7 +60,7 @@ export default function App() {
       setUploadError(null);
       for (const file of pdfs) {
         try {
-          const paper = await api.uploadPaper(file, model);
+          const paper = await api.uploadPaper(file, ai);
           setPapers((prev) => [paper, ...prev]);
           setSelectedPaperId(paper.id);
           setView("read");
@@ -69,7 +69,7 @@ export default function App() {
         }
       }
     },
-    [model],
+    [ai],
   );
 
   // Drop a PDF anywhere on the page.
@@ -111,7 +111,7 @@ export default function App() {
   const selectedPaper = papers.find((p) => p.id === selectedPaperId) ?? null;
 
   const retryPaper = async (id: string) => {
-    await api.reanalyze(id, model);
+    await api.reanalyze(id, ai);
     await refresh();
   };
 
@@ -144,7 +144,7 @@ export default function App() {
         </nav>
         <div className="topbar-right">
           {uploadError && <span className="error-text">{uploadError}</span>}
-          <ModelPicker {...modelChoice} />
+          <ModelPicker {...aiChoice} />
           <button className="primary" onClick={() => fileInput.current?.click()}>
             + Add paper
           </button>
@@ -187,7 +187,7 @@ export default function App() {
                 paper={selectedPaper}
                 onJumpToPage={(page) => setJump({ page, nonce: Date.now() })}
                 onRetry={() => retryPaper(selectedPaper.id)}
-                model={model}
+                ai={ai}
               />
             )}
           </aside>
@@ -200,7 +200,7 @@ export default function App() {
           onSelect={setSelectedComparisonId}
           onChanged={refresh}
           onOpenConcept={openConceptInPaper}
-          model={model}
+          ai={ai}
         />
       )}
 

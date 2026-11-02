@@ -1,7 +1,7 @@
 # Reasoner
 
-Drop in a scientific paper and get help learning it. An OpenAI model reads the whole PDF and returns the 25 most important
-concepts a newcomer needs, a plain-language summary, a reading plan and self-check questions. You can also chat
+Drop in a scientific paper and get help learning it. An OpenAI model reads the whole PDF and returns the concepts
+a newcomer needs, ranked from essential to peripheral, a plain-language summary, a reading plan and self-check questions. You can also chat
 with the paper. Add more papers and Reasoner draws a mind map that links concepts across them: the same idea under
 different names, ideas that build on each other, prerequisites, and contrasting approaches.
 
@@ -12,18 +12,23 @@ backend/    Node + Express + TypeScript → Railway (with Railway Postgres)
 
 ## How it works
 
-- **Model choice:** the **Model** menu in the top bar lists the models your OpenAI key can use (from the
+- **Model and mode:** the **Model** menu in the top bar lists the models your OpenAI key can use (from the
   `/v1/models` endpoint, minus audio, image, embedding and dated snapshot models). You can also type any model id
-  under "Custom model id…". The choice is saved in your browser and applies to new analyses, maps and chat
-  messages. Each paper and map records which model produced it, and you can re-run a paper with a different model.
+  under "Custom model id…". The **Mode** menu sets the reasoning effort: Model default, None, Minimal, Low,
+  Medium, High (the starting choice), Extra high or Max. Higher modes think longer, so they are slower and cost
+  more. Not every model supports every level; if a model rejects one, the error says so and you can pick another.
+  Both choices are saved in your browser and apply to new analyses, maps and chat messages. Each paper and map
+  records the model and mode that produced it, and you can re-run a paper with different ones.
+- **Concepts:** the model decides how many concepts a paper needs, so a short paper may get a handful and a dense
+  one many more. Each concept has a relevance tier (essential, important, helpful or peripheral) and a reason for
+  its rank. The list is sorted from most to least relevant, and the backend enforces the tier order.
 - **Upload:** the PDF is stored in Postgres and uploaded once to the OpenAI Files API (`purpose: user_data`).
   Requests then refer to it by `file_id`, so the PDF is not re-sent each time.
 - **Analysis:** OpenAI Responses API with structured outputs (a strict JSON schema from the Zod schema in
-  `backend/src/schemas.ts`). Reasoning models (o-series, GPT-5 and later) run at `high` reasoning effort. It runs
-  as a background job, and the UI polls until it finishes.
+  `backend/src/schemas.ts`), run at the model and mode you chose. It runs as a background job, and the UI polls until it finishes.
 - **Chat:** answers are streamed over server-sent events. The PDF always leads the conversation, so OpenAI's
   automatic prompt caching can reuse it on follow-up questions.
-- **Compare (2–4 papers):** the model gets every full paper plus each paper's concept list, labelled `A.c1` … `D.c25`.
+- **Compare (2–4 papers):** the model gets every full paper plus each paper's concept list, labelled `A.c1`, `A.c2`, … `B.c1`, and so on.
   It returns typed links (`same`, `similar`, `extends`, `prerequisite`, `applies`, `part_of`, `contrasts`). The
   backend checks each link and drops any that don't point at a real concept.
 
@@ -76,7 +81,6 @@ Push this repo to GitHub first. Both Vercel and Railway deploy from a GitHub rep
 | `PGSSL` | `false` | Set to `true` for Postgres URLs that require SSL (e.g. Railway's public URL) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Allowed frontend origins |
 | `OPENAI_MODEL` | `gpt-5.5` | Default model. Users can choose another in the app |
-| `CONCEPT_COUNT` | `25` | How many key concepts to extract per paper |
 
 ## Known limitations
 

@@ -18,6 +18,7 @@ export async function migrate(): Promise<void> {
       pdf               bytea NOT NULL,
       openai_file_id    text,
       model             text NOT NULL,
+      effort            text,
       status            text NOT NULL DEFAULT 'processing',
       error             text,
       analysis          jsonb,
@@ -28,6 +29,7 @@ export async function migrate(): Promise<void> {
       id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       paper_ids  uuid[] NOT NULL,
       model      text NOT NULL,
+      effort     text,
       status     text NOT NULL DEFAULT 'processing',
       error      text,
       result     jsonb,
@@ -42,6 +44,13 @@ export async function migrate(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS chat_messages_paper_idx ON chat_messages(paper_id, id);
+
+    -- Columns added after the first version, for databases created before them.
+    ALTER TABLE papers ADD COLUMN IF NOT EXISTS openai_file_id text;
+    ALTER TABLE papers ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5';
+    ALTER TABLE papers ADD COLUMN IF NOT EXISTS effort text;
+    ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5';
+    ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS effort text;
   `);
 
   // Background jobs run in-process, so anything still "processing" was interrupted by a restart.

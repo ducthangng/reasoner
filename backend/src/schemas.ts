@@ -1,7 +1,13 @@
 import { z } from "zod";
 
+export const RELEVANCE_TIERS = ["essential", "important", "helpful", "peripheral"] as const;
+
 export const ConceptSchema = z.object({
   term: z.string().describe("The concept, term, method or idea as it is usually named"),
+  relevance: z
+    .enum(RELEVANCE_TIERS)
+    .describe("How much a learner needs this concept to understand the paper"),
+  relevance_reason: z.string().describe("One sentence on why this concept has this rank for this paper"),
   category: z
     .enum(["foundation", "method", "math", "domain", "tool", "metric", "result"])
     .describe("What kind of concept this is"),
@@ -36,7 +42,7 @@ export const PaperAnalysisSchema = z.object({
     .describe("Ordered steps for reading this paper as a beginner, naming sections and pages"),
   concepts: z
     .array(ConceptSchema)
-    .describe("The most important concepts a learner must understand, most important first"),
+    .describe("Every concept a learner needs, ranked from most to least relevant to understanding the paper"),
   check_questions: z
     .array(z.object({ question: z.string(), answer: z.string() }))
     .describe("5-8 self-check questions with answers to test understanding"),

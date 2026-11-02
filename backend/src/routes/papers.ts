@@ -2,7 +2,14 @@ import { Router } from "express";
 import multer from "multer";
 import { pool } from "../db.js";
 import { ensureFileId, runAnalysis } from "../jobs.js";
-import { chatAboutPaper, deleteUploadedFile, describeApiError, resolveModel, type ChatTurn } from "../llm.js";
+import {
+  chatAboutPaper,
+  deleteUploadedFile,
+  describeApiError,
+  resolveEffort,
+  resolveModel,
+  type ChatTurn,
+} from "../llm.js";
 import { isUuid } from "../util.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -17,7 +24,7 @@ papersRouter.param("id", (req, res, next, id) => {
   next();
 });
 
-const SUMMARY_COLUMNS = "id, filename, title, size_bytes, model, status, error, created_at";
+const SUMMARY_COLUMNS = "id, filename, title, size_bytes, model, effort, status, error, created_at";
 
 papersRouter.get("/", async (_req, res) => {
   const { rows } = await pool.query(`SELECT ${SUMMARY_COLUMNS} FROM papers ORDER BY created_at DESC`);
@@ -39,8 +46,9 @@ papersRouter.post("/", upload.single("file"), async (req, res) => {
     return;
   }
   const { rows } = await pool.query(
-    `INSERT INTO papers (filename, size_bytes, pdf, model) VALUES ($1, $2, $3, $4) RETURNING ${SUMMARY_COLUMNS}`,
-    [file.originalname, file.size, file.buffer, resolveModel(req.body?.model)],
+    `INSERT INTO papers (filename, size_bytes, pdf, model, effort) VALUES ($1, $2, $3, $4, $5)
+     RETURNING ${SUMMARY_COLUMNS}`,
+    [file.originalname, file.size, file.buffer, resolveModel(req.body?.model), resolveEffort(req.body?.effort)],
   );
   void runAnalysis(rows[0].id);
   res.status(201).json(rows[0]);
@@ -72,10 +80,10 @@ papersRouter.get("/:id/pdf", async (req, res) => {
 
 papersRouter.post("/:id/reanalyze", async (req, res) => {
   const { rows } = await pool.query(
-    `UPDATE papers SET status = 'processing', error = NULL, model = coalesce($2, model)
+    `UPDATE papers SET status = 'processing', error = NULL, model = $2, effort = $3
      WHERE id = $1 AND status <> 'processing'
      RETURNING ${SUMMARY_COLUMNS}`,
-    [req.params.id, req.body?.model ? resolveModel(req.body.model) : null],
+    [req.params.id, resolveModel(req.body?.model), resolveEffort(req.body?.effort)],
   );
   if (!rows[0]) {
     res.status(409).json({ error: "Paper not found or already processing" });
@@ -133,7 +141,7 @@ papersRouter.post("/:id/chat", async (req, res) => {
   try {
     const fileId = await ensureFileId(req.params.id);
     const answer = await chatAboutPaper(
-      resolveModel(req.body?.model ?? paper.rows[0].model),
+      { model: resolveModel(req.body?.model ?? paper.rows[0].model), effort: resolveEffort(req.body?.effort) },
       fileId,
       history.rows,
       question,

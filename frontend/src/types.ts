@@ -6,6 +6,7 @@ export interface PaperSummary {
   title: string | null;
   size_bytes: number;
   model: string;
+  effort: Effort | null;
   status: Status;
   error: string | null;
   created_at: string;
@@ -13,8 +14,12 @@ export interface PaperSummary {
 
 export type ConceptCategory = "foundation" | "method" | "math" | "domain" | "tool" | "metric" | "result";
 
+export type Relevance = "essential" | "important" | "helpful" | "peripheral";
+
 export interface Concept {
   term: string;
+  relevance: Relevance;
+  relevance_reason: string;
   category: ConceptCategory;
   difficulty: "beginner" | "intermediate" | "advanced";
   short_definition: string;
@@ -77,7 +82,7 @@ export interface ComparisonResult {
     id: string;
     label: string;
     title: string;
-    concepts: { term: string; category: ConceptCategory; short_definition: string }[];
+    concepts: { term: string; relevance?: Relevance; category: ConceptCategory; short_definition: string }[];
   }[];
   links: ComparisonLink[];
 }
@@ -87,6 +92,7 @@ export interface ComparisonSummary {
   paper_ids: string[];
   paper_titles?: string[];
   model: string;
+  effort: Effort | null;
   status: Status;
   error: string | null;
   created_at: string;
@@ -96,8 +102,17 @@ export interface ComparisonDetail extends ComparisonSummary {
   result: ComparisonResult | null;
 }
 
+export type Effort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export interface AiSettings {
+  model: string;
+  /** null = let the model use its default reasoning effort */
+  effort: Effort | null;
+}
+
 export interface ModelList {
   default: string;
   models: string[];
+  efforts: Effort[];
   error?: string;
 }

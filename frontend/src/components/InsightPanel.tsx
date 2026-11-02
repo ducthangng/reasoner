@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { PaperDetail, PaperSummary } from "../types";
+import type { AiSettings, PaperDetail, PaperSummary } from "../types";
 import { AskTab } from "./AskTab";
 import { ConceptsTab } from "./ConceptsTab";
 import { Markdown } from "./Markdown";
+import { aiLabel } from "./ModelPicker";
 
 type Tab = "overview" | "concepts" | "practice" | "ask";
 
@@ -11,11 +12,13 @@ interface Props {
   paper: PaperSummary;
   onJumpToPage: (page: number) => void;
   onRetry: () => void;
-  /** Currently selected model, used for new chat messages. */
-  model: string;
+  /** Currently selected model and effort, used for retries and new chat messages. */
+  ai: AiSettings;
 }
 
-export function InsightPanel({ paper, onJumpToPage, onRetry, model }: Props) {
+export function InsightPanel({ paper, onJumpToPage, onRetry, ai }: Props) {
+  const current = aiLabel(ai.model, ai.effort);
+  const used = aiLabel(paper.model, paper.effort);
   const [detail, setDetail] = useState<PaperDetail | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -46,7 +49,7 @@ export function InsightPanel({ paper, onJumpToPage, onRetry, model }: Props) {
         <h3>Analysis failed</h3>
         <p className="error-text">{paper.error}</p>
         <button className="primary" onClick={onRetry}>
-          Retry with {model}
+          Retry with {current}
         </button>
       </div>
     );
@@ -66,14 +69,14 @@ export function InsightPanel({ paper, onJumpToPage, onRetry, model }: Props) {
         <div className="chip-row tight">
           {a.field && <span className="chip subtle">{a.field}</span>}
           <span className="chip subtle" title="Model that wrote this analysis">
-            {paper.model}
+            {used}
           </span>
-          {model !== paper.model && (
+          {current !== used && (
             <button
               className="link small"
-              onClick={() => confirm(`Re-run the analysis with ${model}? This replaces the current one.`) && onRetry()}
+              onClick={() => confirm(`Re-run the analysis with ${current}? This replaces the current one.`) && onRetry()}
             >
-              Re-run with {model}
+              Re-run with {current}
             </button>
           )}
         </div>
@@ -121,7 +124,7 @@ export function InsightPanel({ paper, onJumpToPage, onRetry, model }: Props) {
         )}
         {tab === "concepts" && <ConceptsTab concepts={a.concepts} onJumpToPage={onJumpToPage} />}
         {tab === "practice" && <PracticeTab questions={a.check_questions} />}
-        {tab === "ask" && <AskTab paperId={paper.id} model={model} />}
+        {tab === "ask" && <AskTab paperId={paper.id} ai={ai} />}
       </div>
     </div>
   );

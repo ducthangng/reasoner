@@ -2,7 +2,7 @@ import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import { MulterError } from "multer";
 import { migrate } from "./db.js";
-import { DEFAULT_MODEL, describeApiError, listModels } from "./llm.js";
+import { DEFAULT_MODEL, describeApiError, EFFORTS, listModels } from "./llm.js";
 import { comparisonsRouter } from "./routes/comparisons.js";
 import { papersRouter } from "./routes/papers.js";
 
@@ -21,10 +21,15 @@ app.get("/health", (_req, res) => {
 app.get("/api/models", async (_req, res) => {
   try {
     const models = await listModels();
-    res.json({ default: DEFAULT_MODEL, models: models.map((m) => m.id) });
+    res.json({ default: DEFAULT_MODEL, models: models.map((m) => m.id), efforts: EFFORTS });
   } catch (err) {
     // Still let the UI work with the default model if listing fails.
-    res.json({ default: DEFAULT_MODEL, models: [], error: describeApiError(err) ?? "Could not list models" });
+    res.json({
+      default: DEFAULT_MODEL,
+      models: [],
+      efforts: EFFORTS,
+      error: describeApiError(err) ?? "Could not list models",
+    });
   }
 });
 app.use("/api/papers", papersRouter);

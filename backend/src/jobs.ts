@@ -1,6 +1,15 @@
 import { pool } from "./db.js";
-import { analyzePaper, comparePapers, describeApiError, fileExists, LLMError, uploadPdf } from "./llm.js";
-import type { PaperAnalysis } from "./schemas.js";
+import {
+  analyzePaper,
+  comparePapers,
+  describeApiError,
+  fileExists,
+  LLMError,
+  resolveEffort,
+  uploadPdf,
+  type AiSettings,
+} from "./llm.js";
+import { RELEVANCE_TIERS, type PaperAnalysis } from "./schemas.js";
 
 function errorMessage(err: unknown): string {
   if (err instanceof LLMError) return err.message;
@@ -29,11 +38,16 @@ export async function ensureFileId(paperId: string): Promise<string> {
 export async function runAnalysis(paperId: string): Promise<void> {
   try {
     const fileId = await ensureFileId(paperId);
-    const { rows } = await pool.query<{ model: string }>("SELECT model FROM papers WHERE id = $1", [paperId]);
-    const analysis = await analyzePaper(rows[0].model, fileId);
+    const { rows } = await pool.query<{ model: string; effort: string | null }>(
+      "SELECT model, effort FROM papers WHERE id = $1",
+      [paperId],
+    );
+    const analysis = await analyzePaper({ model: rows[0].model, effort: resolveEffort(rows[0].effort) }, fileId);
     for (const c of analysis.concepts) {
       c.pages = [...new Set(c.pages.map(Math.round).filter((p) => p >= 1))].sort((a, b) => a - b);
     }
+    // Enforce the tier order the model was asked for; the sort is stable, so its ranking within a tier is kept.
+    analysis.concepts.sort((a, b) => RELEVANCE_TIERS.indexOf(a.relevance) - RELEVANCE_TIERS.indexOf(b.relevance));
     await pool.query(
       "UPDATE papers SET status = 'ready', error = NULL, title = $2, analysis = $3 WHERE id = $1",
       [paperId, analysis.title, JSON.stringify(analysis)],
@@ -53,7 +67,7 @@ export interface ResolvedLink {
   explanation: string;
 }
 
-export async function runComparison(comparisonId: string, paperIds: string[], model: string): Promise<void> {
+export async function runComparison(comparisonId: string, paperIds: string[], ai: AiSettings): Promise<void> {
   try {
     const { rows } = await pool.query<{ id: string; analysis: PaperAnalysis }>(
       "SELECT id, analysis FROM papers WHERE id = ANY($1::uuid[])",
@@ -69,7 +83,7 @@ export async function runComparison(comparisonId: string, paperIds: string[], mo
       })),
     );
 
-    const output = await comparePapers(model, papers);
+    const output = await comparePapers(ai, papers);
 
     // Resolve "A.c3"-style keys to (paperId, conceptIndex), dropping anything malformed or self-referential.
     const resolveKey = (key: string) => {
@@ -99,6 +113,7 @@ export async function runComparison(comparisonId: string, paperIds: string[], mo
         title: p.analysis.title,
         concepts: p.analysis.concepts.map((c) => ({
           term: c.term,
+          relevance: c.relevance,
           category: c.category,
           short_definition: c.short_definition,
         })),
