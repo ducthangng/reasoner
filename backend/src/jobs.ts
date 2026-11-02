@@ -10,6 +10,7 @@ import {
   type AiSettings,
 } from "./llm.js";
 import { RELEVANCE_TIERS, type PaperAnalysis } from "./schemas.js";
+import { readPdf } from "./storage.js";
 
 function errorMessage(err: unknown): string {
   if (err instanceof LLMError) return err.message;
@@ -29,8 +30,7 @@ export async function ensureFileId(paperId: string): Promise<string> {
   if (!row) throw new Error(`Paper ${paperId} not found`);
   if (row.openai_file_id && (await fileExists(row.openai_file_id))) return row.openai_file_id;
 
-  const pdf = await pool.query<{ pdf: Buffer }>("SELECT pdf FROM papers WHERE id = $1", [paperId]);
-  const fileId = await uploadPdf(row.filename, pdf.rows[0].pdf);
+  const fileId = await uploadPdf(row.filename, await readPdf(paperId));
   await pool.query("UPDATE papers SET openai_file_id = $2 WHERE id = $1", [paperId, fileId]);
   return fileId;
 }

@@ -15,7 +15,8 @@ export async function migrate(): Promise<void> {
       filename          text NOT NULL,
       title             text,
       size_bytes        integer NOT NULL,
-      pdf               bytea NOT NULL,
+      pdf               bytea,
+      s3_key            text,
       openai_file_id    text,
       model             text NOT NULL,
       effort            text,
@@ -49,6 +50,8 @@ export async function migrate(): Promise<void> {
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS openai_file_id text;
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5-2026-04-23';
     ALTER TABLE papers ADD COLUMN IF NOT EXISTS effort text;
+    ALTER TABLE papers ADD COLUMN IF NOT EXISTS s3_key text;
+    ALTER TABLE papers ALTER COLUMN pdf DROP NOT NULL;
     ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT 'gpt-5.5-2026-04-23';
     ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS effort text;
   `);

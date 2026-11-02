@@ -15,9 +15,22 @@ interface Props {
   onChanged: () => Promise<void>;
   onOpenConcept: (paperId: string, page?: number) => void;
   ai: AiSettings;
+  /** Responsive-layout classes from App (pane switch, library drawer). */
+  layoutClass: string;
+  onCloseLibrary: () => void;
 }
 
-export function CompareView({ papers, comparisons, selectedId, onSelect, onChanged, onOpenConcept, ai }: Props) {
+export function CompareView({
+  papers,
+  comparisons,
+  selectedId,
+  onSelect,
+  onChanged,
+  onOpenConcept,
+  ai,
+  layoutClass,
+  onCloseLibrary,
+}: Props) {
   const ready = papers.filter((p) => p.status === "ready");
   const [picked, setPicked] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
@@ -65,7 +78,8 @@ export function CompareView({ papers, comparisons, selectedId, onSelect, onChang
   const result = detail?.result;
 
   return (
-    <main className="compare-layout">
+    <main className={`compare-layout ${layoutClass}`}>
+      <div className="drawer-backdrop" onClick={onCloseLibrary} />
       <nav className="library">
         <div className="pane-heading">New map</div>
         <p className="muted small pad">Pick 2–4 analyzed papers. Order sets the columns.</p>

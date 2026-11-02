@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import { MulterError } from "multer";
 import { migrate } from "./db.js";
+import { storageKind } from "./storage.js";
 import { DEFAULT_MODEL, describeApiError, EFFORTS, listModels, RESEARCH_MODELS } from "./llm.js";
 import { comparisonsRouter } from "./routes/comparisons.js";
 import { papersRouter } from "./routes/papers.js";
@@ -60,5 +61,5 @@ try {
   process.exit(1);
 }
 app.listen(port, () => {
-  console.log(`Reasoner API listening on :${port}`);
+  console.log(`Reasoner API listening on :${port} (PDFs stored in ${storageKind})`);
 });

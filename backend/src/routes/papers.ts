@@ -11,6 +11,7 @@ import {
   resolveModel,
   type ChatTurn,
 } from "../llm.js";
+import { deletePdf, openPdf, savePdf } from "../storage.js";
 import { isUuid } from "../util.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -47,10 +48,18 @@ papersRouter.post("/", requireAnalyzePassword, upload.single("file"), async (req
     return;
   }
   const { rows } = await pool.query(
-    `INSERT INTO papers (filename, size_bytes, pdf, model, effort) VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO papers (filename, size_bytes, model, effort) VALUES ($1, $2, $3, $4)
      RETURNING ${SUMMARY_COLUMNS}`,
-    [file.originalname, file.size, file.buffer, resolveModel(req.body?.model), resolveEffort(req.body?.effort)],
+    [file.originalname, file.size, resolveModel(req.body?.model), resolveEffort(req.body?.effort)],
   );
+  try {
+    await savePdf(rows[0].id, file.originalname, file.buffer);
+  } catch (err) {
+    console.error("Storing PDF failed:", err);
+    await pool.query("DELETE FROM papers WHERE id = $1", [rows[0].id]);
+    res.status(502).json({ error: "Could not store the PDF. Check the server's S3 settings." });
+    return;
+  }
   void runAnalysis(rows[0].id);
   res.status(201).json(rows[0]);
 });
@@ -65,18 +74,23 @@ papersRouter.get("/:id", async (req, res) => {
 });
 
 papersRouter.get("/:id/pdf", async (req, res) => {
-  const { rows } = await pool.query<{ pdf: Buffer; filename: string }>(
-    "SELECT pdf, filename FROM papers WHERE id = $1",
-    [req.params.id],
-  );
-  if (!rows[0]) {
-    res.status(404).json({ error: "Paper not found" });
+  const { rows } = await pool.query<{ filename: string }>("SELECT filename FROM papers WHERE id = $1", [
+    req.params.id,
+  ]);
+  const pdf = rows[0] && (await openPdf(req.params.id));
+  if (!pdf) {
+    res.status(404).json({ error: "PDF not found" });
     return;
   }
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(rows[0].filename)}"`);
   res.setHeader("Cache-Control", "private, max-age=86400, immutable");
-  res.send(rows[0].pdf);
+  if (pdf.size !== undefined) res.setHeader("Content-Length", String(pdf.size));
+  if (Buffer.isBuffer(pdf.stream)) {
+    res.end(pdf.stream);
+  } else {
+    pdf.stream.on("error", () => res.destroy()).pipe(res);
+  }
 });
 
 papersRouter.post("/:id/reanalyze", requireAnalyzePassword, async (req, res) => {
@@ -95,11 +109,12 @@ papersRouter.post("/:id/reanalyze", requireAnalyzePassword, async (req, res) => 
 });
 
 papersRouter.delete("/:id", async (req, res) => {
-  const { rows } = await pool.query<{ openai_file_id: string | null }>(
-    "DELETE FROM papers WHERE id = $1 RETURNING openai_file_id",
+  const { rows } = await pool.query<{ openai_file_id: string | null; s3_key: string | null }>(
+    "DELETE FROM papers WHERE id = $1 RETURNING openai_file_id, s3_key",
     [req.params.id],
   );
   if (rows[0]?.openai_file_id) void deleteUploadedFile(rows[0].openai_file_id);
+  if (rows[0]) void deletePdf(rows[0].s3_key);
   res.status(204).end();
 });
 

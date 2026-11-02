@@ -141,7 +141,7 @@ export function MindMap({ result, selection, onSelect }: Props) {
         <div
           className="map-content"
           ref={content}
-          style={{ gridTemplateColumns: `repeat(${result.papers.length}, minmax(200px, 260px))` }}
+          style={{ gridTemplateColumns: `repeat(${result.papers.length}, minmax(160px, 260px))` }}
         >
           <svg className="map-links" width={size.w} height={size.h}>
             {paths.map((p) => {

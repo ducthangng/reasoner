@@ -76,6 +76,9 @@ export function PdfViewer({ url, jump }: Props) {
         <span className="muted small">
           {numPages ? `Page ${currentPage} / ${numPages}` : "Loading…"}
         </span>
+        <a className="link small" href={url} target="_blank" rel="noreferrer">
+          Open PDF ↗
+        </a>
         <div className="zoom">
           <button className="icon-btn" disabled={zoomIdx === 0} onClick={() => setZoomIdx((z) => z - 1)}>
             −

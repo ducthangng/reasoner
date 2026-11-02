@@ -22,8 +22,13 @@ backend/    Node + Express + TypeScript → Railway (with Railway Postgres)
 - **Concepts:** the model decides how many concepts a paper needs, so a short paper may get a handful and a dense
   one many more. Each concept has a relevance tier (essential, important, helpful or peripheral) and a reason for
   its rank. The list is sorted from most to least relevant, and the backend enforces the tier order.
-- **Upload:** the PDF is stored in Postgres and uploaded once to the OpenAI Files API (`purpose: user_data`).
-  Requests then refer to it by `file_id`, so the PDF is not re-sent each time.
+- **Upload:** the PDF is stored in AWS S3 (or in Postgres when `S3_BUCKET` is unset, which suits local dev). It
+  is also uploaded once to the OpenAI Files API (`purpose: user_data`), and requests then refer to it by
+  `file_id`, so the PDF is not re-sent each time. The viewer loads the PDF through `/api/papers/:id/pdf`, which
+  streams it from S3, so the bucket can stay fully private and needs no CORS rules. "Open PDF ↗" opens the
+  original file in a new tab.
+- **Links:** the address bar tracks what's open (`#/paper/<id>`, `#/compare/<id>`), so a link opens that paper
+  or map directly.
 - **Analysis:** OpenAI Responses API with structured outputs (a strict JSON schema from the Zod schema in
   `backend/src/schemas.ts`), run at the model and mode you chose. It runs as a background job, and the UI polls until it finishes.
 - **Chat:** answers are streamed over server-sent events. The PDF always leads the conversation, so OpenAI's
@@ -74,6 +79,26 @@ Push this repo to GitHub first. Both Vercel and Railway deploy from a GitHub rep
    - `CORS_ORIGINS`: your Vercel URL, e.g. `https://reasoner.vercel.app` (comma-separate several)
 4. Generate a public domain for the service under Settings → Networking.
 
+### PDF storage → AWS S3
+
+1. Create a private S3 bucket and leave "Block all public access" on.
+2. Create an IAM user (or role) with access to just that bucket's prefix:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+       "Resource": "arn:aws:s3:::YOUR_BUCKET/papers/*"
+     }]
+   }
+   ```
+3. Add these variables to the Railway backend service: `S3_BUCKET`, `AWS_REGION` (the bucket's region, e.g.
+   `eu-central-1`), `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+
+When the backend starts, its log says where PDFs are stored, e.g. `PDFs stored in S3 bucket "…"`. Papers uploaded
+before S3 was configured stay in Postgres and still open normally.
+
 ### Frontend → Vercel
 
 1. Import the repo into Vercel and set the **Root Directory** to `frontend`. Vercel detects Vite automatically.
@@ -88,6 +113,10 @@ Push this repo to GitHub first. Both Vercel and Railway deploy from a GitHub rep
 | `ANALYZE_PASSWORD` | none (required) | Password needed to start an analysis |
 | `DATABASE_URL` | none (required) | Postgres connection string |
 | `PGSSL` | `false` | Set to `true` for Postgres URLs that require SSL (e.g. Railway's public URL) |
+| `S3_BUCKET` | none | S3 bucket for PDFs. Unset means PDFs are stored in Postgres |
+| `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | none | S3 credentials (standard AWS variables) |
+| `S3_PREFIX` | `papers/` | Key prefix inside the bucket |
+| `S3_ENDPOINT` | none | Only for S3-compatible stores (R2, MinIO) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Allowed frontend origins |
 | `OPENAI_MODEL` | `gpt-5.5-2026-04-23` | Default model. Users choose from `RESEARCH_MODELS` in the app |
 
@@ -97,8 +126,6 @@ Push this repo to GitHub first. Both Vercel and Railway deploy from a GitHub rep
   (both call OpenAI) and delete papers.
 - Background jobs run inside the API process. If it restarts during an analysis, that paper is marked failed and
   you can retry it from the UI. For heavy use, move the jobs to a queue.
-- PDFs are stored in Postgres (`bytea`). That works for a personal library. For larger volumes, move them to object
-  storage such as a Railway bucket or S3.
 - The model must accept PDF input (current GPT and o-series models do). OpenAI limits how large a PDF a request
   can include, so very long papers may be rejected.
 

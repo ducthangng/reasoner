@@ -9,13 +9,27 @@ import { PdfViewer } from "./components/PdfViewer";
 import type { ComparisonSummary, PaperSummary } from "./types";
 
 type View = "read" | "compare";
+/** On narrow screens only one pane shows: the document/map ("main") or the notes/details ("side"). */
+export type Pane = "main" | "side";
+
+/** Reads "#/paper/<id>" or "#/compare/<id>" so a link opens a specific paper or map. */
+function readHash(): { view: View; id: string | null } {
+  const m = /^#\/(paper|compare)(?:\/([\w-]+))?/.exec(window.location.hash);
+  if (!m) return { view: "read", id: null };
+  return { view: m[1] === "compare" ? "compare" : "read", id: m[2] ?? null };
+}
 
 export default function App() {
-  const [view, setView] = useState<View>("read");
+  const initial = readHash();
+  const [view, setView] = useState<View>(initial.view);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [pane, setPane] = useState<Pane>("main");
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [comparisons, setComparisons] = useState<ComparisonSummary[]>([]);
-  const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null);
-  const [selectedComparisonId, setSelectedComparisonId] = useState<string | null>(null);
+  const [selectedPaperId, setSelectedPaperId] = useState<string | null>(initial.view === "read" ? initial.id : null);
+  const [selectedComparisonId, setSelectedComparisonId] = useState<string | null>(
+    initial.view === "compare" ? initial.id : null,
+  );
   const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -52,6 +66,23 @@ export default function App() {
   useEffect(() => {
     if (!selectedPaperId && papers.length) setSelectedPaperId(papers[0].id);
   }, [papers, selectedPaperId]);
+
+  // Keep the URL in sync with what's open.
+  useEffect(() => {
+    const id = view === "read" ? selectedPaperId : selectedComparisonId;
+    const hash = `#/${view === "read" ? "paper" : "compare"}${id ? `/${id}` : ""}`;
+    if (window.location.hash !== hash) history.replaceState(null, "", hash);
+  }, [view, selectedPaperId, selectedComparisonId]);
+
+  const selectPaper = (id: string) => {
+    setSelectedPaperId(id);
+    setLibraryOpen(false);
+    setPane("main");
+  };
+  const selectComparison = (id: string | null) => {
+    setSelectedComparisonId(id);
+    setLibraryOpen(false);
+  };
 
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -140,12 +171,16 @@ export default function App() {
   const openConceptInPaper = (paperId: string, page?: number) => {
     setSelectedPaperId(paperId);
     setView("read");
+    setPane("main");
     if (page) setJump({ page, nonce: Date.now() });
   };
 
   return (
     <div className="app">
       <header className="topbar">
+        <button className="library-toggle" onClick={() => setLibraryOpen((o) => !o)} aria-label="Toggle library">
+          ☰ <span>{view === "read" ? "Library" : "Maps"}</span>
+        </button>
         <div className="brand">
           <span className="brand-mark">◆</span> Reasoner
         </div>
@@ -179,12 +214,22 @@ export default function App() {
 
       {loadError && <div className="banner">{loadError}</div>}
 
+      <div className="pane-switch" role="tablist">
+        <button className={pane === "main" ? "active" : ""} onClick={() => setPane("main")}>
+          {view === "read" ? "PDF" : "Map"}
+        </button>
+        <button className={pane === "side" ? "active" : ""} onClick={() => setPane("side")}>
+          {view === "read" ? "Notes" : "Details"}
+        </button>
+      </div>
+
       {view === "read" ? (
-        <main className="read-layout">
+        <main className={`read-layout pane-${pane} ${libraryOpen ? "library-open" : ""}`}>
+          <div className="drawer-backdrop" onClick={() => setLibraryOpen(false)} />
           <Library
             papers={papers}
             selectedId={selectedPaperId}
-            onSelect={setSelectedPaperId}
+            onSelect={selectPaper}
             onDelete={deletePaper}
             onRetry={retryPaper}
           />
@@ -212,10 +257,12 @@ export default function App() {
           papers={papers}
           comparisons={comparisons}
           selectedId={selectedComparisonId}
-          onSelect={setSelectedComparisonId}
+          onSelect={selectComparison}
           onChanged={refresh}
           onOpenConcept={openConceptInPaper}
           ai={ai}
+          layoutClass={`pane-${pane} ${libraryOpen ? "library-open" : ""}`}
+          onCloseLibrary={() => setLibraryOpen(false)}
         />
       )}
 
